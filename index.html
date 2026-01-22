@@ -14,11 +14,11 @@
         "imports": {
             "react": "https://esm.sh/react@18.2.0",
             "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-            
             "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react,react-dom"
         }
     }
     </script>
+
     <style>
         body { background-color: #f8fafc; font-family: sans-serif; }
         .animate-in { animation: fadeIn 0.5s ease-out forwards; opacity: 0; }
@@ -29,11 +29,9 @@
     <div id="root"></div>
 
     <script type="text/babel" data-type="module">
-        // 現在引用變得很乾淨，因為都在上面定義好了
         import React, { useState, useEffect, useMemo } from 'react';
         import { createRoot } from 'react-dom/client';
         
-        // 引用圖示 (HandHeart 在 0.344.0 版確定存在)
         import { 
           Calendar, Clock, User, LogOut, Heart, Monitor, Users, Smile, BookOpen, 
           Coffee, CheckCircle, Info, RefreshCw, Wifi, Database, AlertCircle, 
@@ -44,6 +42,8 @@
         // ==========================================
         // ★ 系統設定區
         // ==========================================
+        
+        // 您的 Google Apps Script API 網址
         const API_URL = "https://script.google.com/macros/s/AKfycbwooXPX-T7GnXQl-gXbOHmHZjSOD5Po5KK0LmoavdT0i260qerMbl2necQG4vo57fXh7g/exec";
 
         const ROLE_CONFIG = {
@@ -57,12 +57,8 @@
           '預設': { color: 'bg-slate-50 text-slate-400 border-slate-100', icon: Clock }
         };
 
-        const DEFAULT_SCHEDULE = [
-          { "堂別": "第一堂", "日期": "2026/1/4", "司會": "林長琦", "執事輪值": "王治平", "接待": "洪志杰、邱馨萱", "收奉獻": "賴燕美", "PPT": "吳介仁", "新朋友關懷": "張文哲" }
-        ];
-        const DEFAULT_PEOPLE_DATA = [
-          { name: "林長琦", session: "第一堂", unavailable: "", roles: { 司會: "O", 接待: "O", 新朋友關懷: "O" } }
-        ];
+        const DEFAULT_SCHEDULE = [];
+        const DEFAULT_PEOPLE_DATA = [];
         const DEFAULT_STATS = { "DEFAULT": 0 };
 
         // ==========================================
@@ -122,12 +118,16 @@
           return rawRows.map(row => {
             const nameKey = Object.keys(row).find(k => k.includes('姓名') || k.toLowerCase() === 'name');
             const name = nameKey ? row[nameKey] : '';
+            
             const sessionKey = Object.keys(row).find(k => k.includes('服事時段') || k.includes('session'));
             const session = sessionKey ? row[sessionKey] : '皆可';
+
             const unavailableKey = Object.keys(row).find(k => k.includes('不能參與') || k.includes('unavailable'));
             const unavailable = unavailableKey ? row[unavailableKey] : '';
+
             const willingnessKey = Object.keys(row).find(k => k.includes('服事意願') || k.includes('willingness'));
             const willingness = willingnessKey ? String(row[willingnessKey]) : '';
+
             const roles = {};
             Object.keys(ROLE_CONFIG).forEach(roleName => {
               const csvKey = Object.keys(row).find(k => k.trim() === roleName);
@@ -138,6 +138,7 @@
                 }
               }
             });
+
             return { name, session, unavailable, willingness, roles };
           }).filter(p => p.name);
         };
@@ -166,9 +167,11 @@
           const [name, setName] = useState('');
           const [loginError, setLoginError] = useState('');
           const [swapRequest, setSwapRequest] = useState(null); 
+          
           const [scheduleData, setScheduleData] = useState(DEFAULT_SCHEDULE);
           const [peopleData, setPeopleData] = useState(DEFAULT_PEOPLE_DATA);
           const [statsData, setStatsData] = useState(DEFAULT_STATS);
+          
           const [isSyncing, setIsSyncing] = useState(false);
           const [syncStatus, setSyncStatus] = useState('');
           const [debugInfo, setDebugInfo] = useState({ scheduleCount: 0, peopleCount: 0, apiError: null });
@@ -178,34 +181,43 @@
               setIsSyncing(true);
               setSyncStatus('正在請求資料...');
               setDebugInfo({ scheduleCount: 0, peopleCount: 0, apiError: null });
+              
+              // ★★★ 使用新的 _view 參數 ★★★
               try {
                 const [resSchedule, resData, resStats] = await Promise.all([
-                  fetch(`${API_URL}?type=schedule`).then(r => r.json()),
-                  fetch(`${API_URL}?type=fileData`).then(r => r.json()),
-                  fetch(`${API_URL}?type=stats`).then(r => r.json())
+                  fetch(`${API_URL}?type=schedule_view`).then(r => r.json()), 
+                  fetch(`${API_URL}?type=data_view`).then(r => r.json()),     
+                  fetch(`${API_URL}?type=stats_view`).then(r => r.json())     
                 ]);
+
                 let sCount = 0, pCount = 0;
+
                 if (resSchedule.status === 'success' && resSchedule.data) {
                   const processedSchedule = sheetToObjects(resSchedule.data);
                   setScheduleData(processedSchedule);
                   sCount = processedSchedule.length;
                 }
+
                 if (resData.status === 'success' && resData.data) {
                   const objData = sheetToObjects(resData.data);
                   const processedPeople = processPeopleData(objData);
                   setPeopleData(processedPeople);
                   pCount = processedPeople.length;
                 }
+
                 if (resStats.status === 'success' && resStats.data) {
                   const objStats = sheetToObjects(resStats.data);
                   setStatsData(processStatsData(objStats));
                 }
+
                 setDebugInfo({ scheduleCount: sCount, peopleCount: pCount, apiError: null });
+                
                 if (sCount > 0 && pCount > 0) {
                   setSyncStatus(`同步成功`);
                 } else {
                   setSyncStatus('同步完成，但資料可能有缺漏');
                 }
+
               } catch (err) {
                 console.error("同步失敗", err);
                 setSyncStatus('連線發生錯誤');
@@ -214,6 +226,7 @@
                 setIsSyncing(false);
               }
             };
+
             loadAllData();
           }, []);
           
@@ -225,11 +238,12 @@
               setLoginError('請輸入姓名');
               return;
             }
+            // 寬鬆判斷：如果資料還沒回來，還是允許嘗試登入
             const userExists = peopleData.some(person => person.name && person.name.trim() === trimmedName);
-            if (userExists) {
+            if (userExists || peopleData.length === 0) {
               setCurrentView('mySchedule');
             } else {
-              setLoginError('找不到此姓名，請確認是否輸入正確或資料尚未同步。');
+              setLoginError('找不到此姓名，請確認是否輸入正確。');
             }
           };
 
@@ -273,6 +287,7 @@
           );
         }
 
+        // 1. Login View
         function LoginView({ name, setName, onLogin, loginError, isSyncing, syncStatus, debugInfo }) {
           return (
             <div className="min-h-screen flex items-center justify-center p-6 bg-slate-100">
@@ -299,14 +314,10 @@
                   </div>
                   {loginError && (
                     <div className="flex items-center gap-2 text-red-500 bg-red-50 p-3 rounded-xl text-sm font-bold animate-in fade-in slide-in-from-top-1">
-                      <AlertCircle size={16} />
-                      <span>{loginError}</span>
+                      <AlertCircle size={16} /><span>{loginError}</span>
                     </div>
                   )}
-                  <button
-                    type="submit"
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 rounded-2xl shadow-lg shadow-indigo-100 transition-all active:scale-95 text-lg"
-                  >
+                  <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 rounded-2xl shadow-lg shadow-indigo-100 transition-all active:scale-95 text-lg">
                     登入系統
                   </button>
                 </form>
@@ -316,9 +327,7 @@
                    </div>
                    <div className={`p-3 rounded-xl text-center text-xs font-bold ${syncStatus.includes('失敗') || syncStatus.includes('錯誤') ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
                      {isSyncing ? (
-                       <span className="flex items-center justify-center gap-2">
-                         <RefreshCw size={12} className="animate-spin" /> 載入資料中...
-                       </span>
+                       <span className="flex items-center justify-center gap-2"><RefreshCw size={12} className="animate-spin" /> 載入資料中...</span>
                      ) : syncStatus}
                    </div>
                    {!isSyncing && (debugInfo.scheduleCount === 0 || debugInfo.apiError) && (
@@ -335,6 +344,7 @@
           );
         }
 
+        // 2. My Schedule View
         function MyScheduleView({ name, scheduleData, onLogout, onRequestSwap }) {
           const [flatShifts, setFlatShifts] = useState([]);
           useEffect(() => {
@@ -359,9 +369,7 @@
                  const key = `${shift.date}|${shift.role}`;
                  if (shiftsMap.has(key)) {
                    const existing = shiftsMap.get(key);
-                   if (!existing.session.includes(shift.session)) {
-                     existing.session += `, ${shift.session}`;
-                   }
+                   if (!existing.session.includes(shift.session)) existing.session += `, ${shift.session}`;
                  } else {
                    shiftsMap.set(key, { ...shift });
                  }
@@ -372,9 +380,7 @@
             });
             const mergedShifts = Array.from(shiftsMap.values());
             mergedShifts.sort((a, b) => {
-              if (a.dateObj.getTime() !== b.dateObj.getTime()) {
-                return a.dateObj.getTime() - b.dateObj.getTime();
-              }
+              if (a.dateObj.getTime() !== b.dateObj.getTime()) return a.dateObj.getTime() - b.dateObj.getTime();
               return a.session.localeCompare(b.session);
             });
             setFlatShifts(mergedShifts);
@@ -425,7 +431,7 @@
                   <div className="text-center py-20 bg-white rounded-[2rem] border-2 border-dashed border-slate-200">
                     <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300"><Briefcase size={40} /></div>
                     <p className="text-slate-400 font-bold text-lg">查無資料</p>
-                    <p className="text-slate-300 text-sm mt-1">沒有安排服事，好好休息</p>
+                    <p className="text-slate-300 text-sm mt-1">請確認姓名輸入正確，或等待資料同步完成。</p>
                   </div>
                 )}
               </main>
@@ -433,6 +439,7 @@
           );
         }
 
+        // 3. Swap Search View
         function SwapSearchView({ name, scheduleData, peopleData, statsData, onBack, onLogout, initialRequest }) {
           const [selectedDate, setSelectedDate] = useState(initialRequest?.date || '');
           const [selectedRole, setSelectedRole] = useState(initialRequest?.role || '');
