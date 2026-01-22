@@ -11,7 +11,7 @@
 
     <style>
         body { background-color: #f8fafc; font-family: sans-serif; }
-        .fade-in { animation: fadeIn 0.5s ease-out forwards; opacity: 0; }
+        .animate-in { animation: fadeIn 0.5s ease-out forwards; opacity: 0; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
@@ -19,443 +19,786 @@
     <div id="root"></div>
 
     <script type="text/babel" data-type="module">
-        // 使用同一來源 (esm.sh) 的 React，確保全域只有一個 React 實例
+        // 使用 esm.sh 載入 React 18，避免重複載入衝突
         import React, { useState, useEffect, useMemo } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         
-        // 指定 0.303.0 版本，確保有 HandHeart 且相容性最好
+        // ★★★ 關鍵修正：改回 @latest 最新版，確保 HandHeart 存在 ★★★
         import { 
           Calendar, Clock, User, LogOut, Heart, Monitor, Users, Smile, BookOpen, 
-          Coffee, RefreshCw, AlertCircle, ArrowLeft, UserCheck, UserX, Briefcase, 
-          Activity, ArrowLeftRight, HandHeart 
-        } from 'https://esm.sh/lucide-react@0.303.0';
+          Coffee, CheckCircle, Info, RefreshCw, Wifi, Database, AlertCircle, 
+          ArrowLeft, Search, UserCheck, BarChart, ArrowRight, UserX, Briefcase, Link as LinkIcon, Activity, MessageCircle, Send,
+          ArrowLeftRight, HandHeart
+        } from 'https://esm.sh/lucide-react@latest';
 
         // ==========================================
-        // ★ 系統設定
+        // ★ 系統設定區
         // ==========================================
         const API_URL = "https://script.google.com/macros/s/AKfycbwooXPX-T7GnXQl-gXbOHmHZjSOD5Po5KK0LmoavdT0i260qerMbl2necQG4vo57fXh7g/exec";
 
         const ROLE_CONFIG = {
-          '司會': { color: 'text-purple-700 bg-purple-50 border-purple-100' },
-          '執事輪值': { color: 'text-indigo-700 bg-indigo-50 border-indigo-100' },
-          '接待': { color: 'text-blue-700 bg-blue-50 border-blue-100' },
-          '收奉獻': { color: 'text-green-700 bg-green-50 border-green-100' },
-          '主餐': { color: 'text-red-700 bg-red-50 border-red-100' },
-          'PPT': { color: 'text-orange-700 bg-orange-50 border-orange-100' },
-          '新朋友關懷': { color: 'text-pink-700 bg-pink-50 border-pink-100' },
-          '預設': { color: 'text-slate-500 bg-slate-50 border-slate-100' }
+          '司會': { color: 'bg-purple-100 text-purple-700 border-purple-200', icon: User },
+          '執事輪值': { color: 'bg-indigo-100 text-indigo-700 border-indigo-200', icon: BookOpen },
+          '接待': { color: 'bg-blue-100 text-blue-700 border-blue-200', icon: Users },
+          '收奉獻': { color: 'bg-green-100 text-green-700 border-green-200', icon: Heart },
+          '主餐': { color: 'bg-red-100 text-red-700 border-red-200', icon: Coffee },
+          'PPT': { color: 'bg-orange-100 text-orange-700 border-orange-200', icon: Monitor },
+          '新朋友關懷': { color: 'bg-pink-100 text-pink-700 border-pink-200', icon: Smile },
+          '預設': { color: 'bg-slate-50 text-slate-400 border-slate-100', icon: Clock }
         };
 
+        // 預設資料
+        const DEFAULT_SCHEDULE = [
+          { "堂別": "第一堂", "日期": "2026/1/4", "司會": "林長琦", "執事輪值": "王治平", "接待": "洪志杰、邱馨萱", "收奉獻": "賴燕美", "PPT": "吳介仁", "新朋友關懷": "張文哲" }
+        ];
+        const DEFAULT_PEOPLE_DATA = [
+          { name: "林長琦", session: "第一堂", unavailable: "", roles: { 司會: "O", 接待: "O", 新朋友關懷: "O" } }
+        ];
+        const DEFAULT_STATS = { "DEFAULT": 0 };
+
         // ==========================================
-        // ★ 工具函式
+        // 工具函式
         // ==========================================
-        const normalizeDateStr = (d) => {
-            if (!d) return '';
-            const str = String(d);
-            if (str.includes('T')) {
-                const date = new Date(str);
-                return `${date.getFullYear()}/${date.getMonth()+1}/${date.getDate()}`;
-            }
-            return str;
-        };
 
         const sheetToObjects = (rows) => {
-            if (!rows || rows.length < 2) return [];
-            const headers = rows[0];
-            return rows.slice(1).map(row => {
-                const obj = {};
-                headers.forEach((h, i) => obj[h] = row[i]);
-                return obj;
+          if (!rows || rows.length < 2) return [];
+          const headers = rows[0];
+          const data = rows.slice(1);
+          
+          return data.map(row => {
+            const obj = {};
+            headers.forEach((header, index) => {
+              let val = row[index];
+              if (val instanceof Date) {
+                 val = `${val.getFullYear()}/${val.getMonth() + 1}/${val.getDate()}`;
+              }
+              obj[header] = val;
             });
+            return obj;
+          });
+        };
+
+        const normalizeDateStr = (dateStr) => {
+          if (!dateStr) return '';
+          const str = String(dateStr);
+          if (str.includes('T')) {
+            const d = new Date(str);
+            return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;
+          }
+          
+          const parts = str.split('/');
+          if (parts.length === 3) {
+            return `${parseInt(parts[0])}/${parseInt(parts[1])}/${parseInt(parts[2])}`;
+          }
+          return str;
+        };
+
+        const formatDatePadded = (dateStr) => {
+          const norm = normalizeDateStr(dateStr);
+          const parts = norm.split('/');
+          if (parts.length !== 3) return dateStr;
+          const y = parts[0];
+          const m = parts[1].padStart(2, '0');
+          const d = parts[2].padStart(2, '0');
+          return `${y}/${m}/${d}`;
+        };
+
+        const parseDateObj = (dStr) => {
+          const norm = normalizeDateStr(dStr);
+          if (!norm) return new Date(9999, 11, 31);
+          const parts = norm.split('/');
+          return new Date(parts[0], parts[1] - 1, parts[2]);
         };
 
         const processPeopleData = (rawRows) => {
-            if (!rawRows) return [];
-            return rawRows.map(row => {
-                const roles = {};
-                // 掃描欄位，標記有能力的崗位
-                Object.keys(ROLE_CONFIG).forEach(role => {
-                    if (row[role]) roles[role] = "O";
-                });
-                return {
-                    name: row['姓名'] || row['name'],
-                    session: row['服事時段'] || row['session'] || '皆可',
-                    unavailable: row['不能參與'] || row['unavailable'] || '',
-                    willingness: String(row['服事意願'] || row['willingness'] || ''),
-                    roles
-                };
-            }).filter(p => p.name);
-        };
-
-        // ==========================================
-        // ★ 元件：登入
-        // ==========================================
-        const LoginView = ({ name, setName, onLogin, loginError, isSyncing, syncStatus }) => (
-            <div className="min-h-screen flex items-center justify-center p-6 bg-slate-100">
-                <div className="bg-white rounded-[2rem] shadow-xl w-full max-w-md p-8 border border-white fade-in">
-                    <div className="text-center mb-8">
-                        <div className="bg-indigo-600 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg rotate-3">
-                            <Calendar className="w-10 h-10 text-white" />
-                        </div>
-                        <h2 className="text-2xl font-black text-slate-800 tracking-tight">TBC 服事查詢</h2>
-                    </div>
-                    <form onSubmit={onLogin} className="space-y-4">
-                        <div className="relative">
-                            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                            <input 
-                                type="text" value={name} onChange={(e) => setName(e.target.value)}
-                                className="w-full pl-12 pr-4 py-4 rounded-xl border-2 border-slate-100 focus:border-indigo-500 focus:bg-white bg-slate-50 outline-none text-lg font-bold transition-all"
-                                placeholder="請輸入姓名" required 
-                            />
-                        </div>
-                        {loginError && (
-                            <div className="bg-red-50 text-red-500 p-3 rounded-xl text-sm font-bold flex items-center gap-2">
-                                <AlertCircle size={16}/> {loginError}
-                            </div>
-                        )}
-                        <button type="submit" disabled={isSyncing} 
-                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-indigo-100 active:scale-95 transition-all disabled:opacity-50">
-                            {isSyncing ? "資料載入中..." : "登入系統"}
-                        </button>
-                    </form>
-                    <div className="mt-6 text-center">
-                        <span className={`text-xs font-bold px-3 py-1 rounded-full ${syncStatus.includes('成功') || syncStatus.includes('就緒') ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                            {syncStatus}
-                        </span>
-                    </div>
-                </div>
-            </div>
-        );
-
-        // ==========================================
-        // ★ 元件：我的班表
-        // ==========================================
-        const MyScheduleView = ({ name, scheduleData, onLogout, onRequestSwap }) => {
-            const myShifts = useMemo(() => {
-                const results = [];
-                scheduleData.forEach(row => {
-                    const date = normalizeDateStr(row['日期']);
-                    const session = row['堂別'];
-                    if (!date) return;
-                    
-                    Object.entries(row).forEach(([role, val]) => {
-                        if (['日期', '堂別', '週次'].includes(role)) return;
-                        if (String(val).includes(name)) {
-                            results.push({ date, session, role, rawSession: session });
-                        }
-                    });
-                });
-                return results.sort((a, b) => new Date(a.date) - new Date(b.date));
-            }, [name, scheduleData]);
-
-            return (
-                <div className="min-h-screen bg-slate-50 pb-10">
-                    <nav className="bg-white px-6 py-4 sticky top-0 z-50 border-b border-slate-100 flex justify-between items-center shadow-sm">
-                        <div className="flex items-center gap-2">
-                            <div className="bg-indigo-100 p-2 rounded-lg"><User className="text-indigo-600" size={20}/></div>
-                            <h2 className="font-black text-slate-800">{name}</h2>
-                        </div>
-                        <button onClick={onLogout} className="bg-slate-100 text-slate-500 px-3 py-2 rounded-lg font-bold text-sm hover:bg-red-50 hover:text-red-500 transition-colors flex items-center gap-1">
-                            <LogOut size={16}/> 登出
-                        </button>
-                    </nav>
-
-                    <main className="p-4 max-w-xl mx-auto space-y-4">
-                        <div className="flex items-center gap-2 mb-2 px-2">
-                            <Activity className="text-indigo-500" size={20}/>
-                            <h3 className="font-bold text-slate-600">本季服事安排</h3>
-                        </div>
-
-                        {myShifts.length > 0 ? myShifts.map((shift, idx) => {
-                            const style = ROLE_CONFIG[shift.role] || ROLE_CONFIG['預設'];
-                            return (
-                                <div key={idx} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 fade-in flex justify-between items-center" style={{animationDelay: `${idx * 0.1}s`}}>
-                                    <div>
-                                        <div className={`inline-block px-2 py-0.5 rounded text-xs font-bold mb-1 ${style.bg} ${style.color}`}>
-                                            {shift.role}
-                                        </div>
-                                        <div className="flex items-center gap-2 text-slate-800 font-bold text-lg">
-                                            <span>{shift.date}</span>
-                                            <span className="text-slate-300">|</span>
-                                            <span className="text-sm bg-slate-100 px-2 py-0.5 rounded text-slate-500">{shift.session}</span>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={() => onRequestSwap({ ...shift, owner: name })}
-                                        className="flex flex-col items-center justify-center w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 active:scale-90 transition-all border border-indigo-100">
-                                        <RefreshCw size={20}/>
-                                    </button>
-                                </div>
-                            );
-                        }) : (
-                            <div className="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-slate-200">
-                                <p className="text-slate-400 font-bold">目前沒有查詢到排班資料</p>
-                            </div>
-                        )}
-                    </main>
-                </div>
-            );
-        };
-
-        // ==========================================
-        // ★ 元件：換班搜尋
-        // ==========================================
-        const SwapSearchView = ({ name, scheduleData, peopleData, statsData, onBack, initialRequest }) => {
-            const [candidates, setCandidates] = useState([]);
-            const { date, role, session, owner } = initialRequest || {};
-
-            useEffect(() => {
-                if (!initialRequest) return;
-                
-                const targetDate = normalizeDateStr(date);
-                const busyPeople = new Set();
-                scheduleData.forEach(row => {
-                    if (normalizeDateStr(row['日期']) === targetDate) {
-                        Object.values(row).forEach(val => {
-                           if (typeof val === 'string') {
-                               val.split(/,|、| /).forEach(n => busyPeople.add(n.trim()));
-                           }
-                        });
-                    }
-                });
-
-                const requesterBusyDates = new Set();
-                scheduleData.forEach(row => {
-                    if(Object.values(row).some(v => String(v).includes(owner))) {
-                        requesterBusyDates.add(normalizeDateStr(row['日期']));
-                    }
-                });
-
-                const results = peopleData.filter(person => {
-                    const pName = person.name;
-                    if (pName === owner) return false; 
-                    if (busyPeople.has(pName)) return false; 
-                    if (person.willingness && (person.willingness.includes('休息') || person.willingness.includes('暫停'))) return false;
-                    if (!person.roles[role]) return false;
-                    if (role !== '執事輪值' && person.session !== '皆可' && !person.session.includes(session)) return false;
-                    return true;
-                }).map(person => {
-                    const swapOptions = [];
-                    scheduleData.forEach(row => {
-                        const rDate = normalizeDateStr(row['日期']);
-                        if (rDate === targetDate) return; 
-                        if (requesterBusyDates.has(rDate)) return; 
-
-                        let personRoleOnThatDay = null;
-                        Object.entries(row).forEach(([k, v]) => {
-                            if (['日期','堂別'].includes(k)) return;
-                            if (String(v).includes(person.name)) personRoleOnThatDay = k;
-                        });
-
-                        if (personRoleOnThatDay) {
-                            const ownerData = peopleData.find(p => p.name === owner);
-                            if (ownerData && ownerData.roles[personRoleOnThatDay]) {
-                                swapOptions.push({
-                                    date: rDate,
-                                    role: personRoleOnThatDay
-                                });
-                            }
-                        }
-                    });
-
-                    return { ...person, swapOptions, stats: statsData[person.name] || 0 };
-                });
-
-                results.sort((a, b) => a.stats - b.stats);
-                setCandidates(results);
-
-            }, [initialRequest, scheduleData, peopleData]);
-
-            return (
-                <div className="min-h-screen bg-slate-50">
-                     <nav className="bg-white px-6 py-4 sticky top-0 z-50 border-b border-slate-100 flex items-center gap-4">
-                        <button onClick={onBack} className="bg-slate-100 p-2 rounded-xl text-slate-600 hover:bg-slate-200">
-                            <ArrowLeft size={20}/>
-                        </button>
-                        <h2 className="text-lg font-black text-slate-800">換班搜尋結果</h2>
-                    </nav>
-
-                    <main className="p-4 max-w-xl mx-auto space-y-4">
-                        <div className="bg-indigo-600 text-white p-6 rounded-3xl shadow-lg shadow-indigo-200">
-                            <p className="text-indigo-200 text-xs font-bold uppercase tracking-wider mb-1">TARGET SHIFT</p>
-                            <p className="text-2xl font-black">{date}</p>
-                            <div className="flex items-center gap-2 mt-2">
-                                <span className="bg-indigo-500/50 px-2 py-1 rounded text-sm font-bold">{role}</span>
-                                <span className="bg-indigo-500/50 px-2 py-1 rounded text-sm font-bold">{session}</span>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between px-2 pt-2">
-                            <h3 className="font-bold text-slate-600 flex items-center gap-2">
-                                <UserCheck className="text-emerald-500" size={18}/> 推薦人選 ({candidates.length})
-                            </h3>
-                            <span className="text-xs bg-slate-200 text-slate-500 px-2 py-1 rounded">依服事量排序</span>
-                        </div>
-
-                        {candidates.map((p, i) => (
-                            <div key={i} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 fade-in" style={{animationDelay: `${i*0.05}s`}}>
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-lg font-black text-slate-800">{p.name}</span>
-                                            {p.swapOptions.length > 0 ? (
-                                                <span className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-bold border border-indigo-100 flex items-center gap-1">
-                                                    <ArrowLeftRight size={10}/> 可交換
-                                                </span>
-                                            ) : (
-                                                <span className="text-[10px] bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full font-bold border border-orange-100 flex items-center gap-1">
-                                                    <HandHeart size={10}/> 純替補
-                                                </span>
-                                            )}
-                                        </div>
-                                        <p className="text-xs text-slate-400 font-bold mt-1">
-                                            時段: {p.session} • 本季: {p.stats} 次
-                                        </p>
-                                    </div>
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md ${i<3 ? 'bg-emerald-400':'bg-slate-300'}`}>
-                                        {i+1}
-                                    </div>
-                                </div>
-
-                                {p.swapOptions.length > 0 && (
-                                    <div className="mt-4 pt-3 border-t border-slate-50">
-                                        <p className="text-[10px] text-slate-400 font-bold mb-2">建議互換：</p>
-                                        <div className="flex flex-wrap gap-2">
-                                            {p.swapOptions.slice(0, 4).map((opt, idx) => (
-                                                <span key={idx} className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-1 rounded-lg font-bold">
-                                                    {opt.date} <span className="opacity-50 text-[10px]">({opt.role})</span>
-                                                </span>
-                                            ))}
-                                            {p.swapOptions.length > 4 && <span className="text-xs text-slate-300 self-center">...</span>}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-
-                        {candidates.length === 0 && (
-                            <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl">
-                                <UserX className="mx-auto text-slate-300 mb-2" size={32}/>
-                                <p className="text-slate-400 font-bold">找不到符合條件的人選</p>
-                                <p className="text-xs text-slate-300 mt-1">大家當天可能都忙碌，或無人具備此技能</p>
-                            </div>
-                        )}
-                    </main>
-                </div>
-            );
-        };
-
-        // ==========================================
-        // ★ 主程式 App
-        // ==========================================
-        function App() {
-            const [view, setView] = useState('login');
-            const [name, setName] = useState('');
-            const [loginError, setLoginError] = useState('');
+          if (!Array.isArray(rawRows)) return [];
+          
+          return rawRows.map(row => {
+            const nameKey = Object.keys(row).find(k => k.includes('姓名') || k.toLowerCase() === 'name');
+            const name = nameKey ? row[nameKey] : '';
             
-            const [scheduleData, setScheduleData] = useState([]);
-            const [peopleData, setPeopleData] = useState([]);
-            const [statsData, setStatsData] = useState({});
-            
-            const [isSyncing, setIsSyncing] = useState(true);
-            const [syncStatus, setSyncStatus] = useState('連線中...');
-            
-            const [swapRequest, setSwapRequest] = useState(null);
+            const sessionKey = Object.keys(row).find(k => k.includes('服事時段') || k.includes('session'));
+            const session = sessionKey ? row[sessionKey] : '皆可';
 
-            useEffect(() => {
-                const loadData = async () => {
-                    try {
-                        // 1. 抓排班表
-                        const sRes = await fetch(`${API_URL}?type=schedule`);
-                        const sJson = await sRes.json();
-                        if (sJson.data) setScheduleData(sheetToObjects(sJson.data));
+            const unavailableKey = Object.keys(row).find(k => k.includes('不能參與') || k.includes('unavailable'));
+            const unavailable = unavailableKey ? row[unavailableKey] : '';
 
-                        setSyncStatus('排班載入完成');
+            const willingnessKey = Object.keys(row).find(k => k.includes('服事意願') || k.includes('willingness'));
+            const willingness = willingnessKey ? String(row[willingnessKey]) : '';
 
-                        // 2. 抓人員名單
-                        const pRes = await fetch(`${API_URL}?type=fileData`);
-                        const pJson = await pRes.json();
-                        if (pJson.data) setPeopleData(processPeopleData(sheetToObjects(pJson.data)));
-
-                        // 3. 抓統計資料
-                        try {
-                            const stRes = await fetch(`${API_URL}?type=stats`);
-                            const stJson = await stRes.json();
-                            if (stJson.data) {
-                                const stats = {};
-                                sheetToObjects(stJson.data).forEach(r => {
-                                    if(r['姓名']) stats[r['姓名']] = parseInt(r['總次數']) || 0;
-                                });
-                                setStatsData(stats);
-                            }
-                        } catch(e) { console.log('No stats data'); }
-
-                        setSyncStatus('系統就緒');
-                        setIsSyncing(false);
-
-                    } catch (e) {
-                        console.error(e);
-                        setSyncStatus('連線失敗');
-                        setIsSyncing(false);
-                    }
-                };
-                loadData();
-            }, []);
-
-            const handleLogin = (e) => {
-                e.preventDefault();
-                const cleanName = name.trim();
-                const exists = peopleData.some(p => p.name === cleanName) || 
-                               scheduleData.some(r => Object.values(r).some(v => String(v).includes(cleanName)));
-
-                if (exists) {
-                    setView('mySchedule');
-                    setLoginError('');
-                } else {
-                    if (scheduleData.length === 0) setLoginError('資料讀取中...');
-                    else setLoginError('查無此人');
+            const roles = {};
+            Object.keys(ROLE_CONFIG).forEach(roleName => {
+              const csvKey = Object.keys(row).find(k => k.trim() === roleName);
+              if (csvKey && row[csvKey]) {
+                const val = String(row[csvKey]).trim();
+                if (val !== '' && val !== 'undefined' && val !== 'null') {
+                  roles[roleName] = "O";
                 }
+              }
+            });
+
+            return { name, session, unavailable, willingness, roles };
+          }).filter(p => p.name);
+        };
+
+        const processStatsData = (rawRows) => {
+          const stats = {};
+          if (!Array.isArray(rawRows)) return stats;
+
+          rawRows.forEach(row => {
+            const nameKey = Object.keys(row).find(k => k.includes('姓名') || k.toLowerCase() === 'name');
+            const countKey = Object.keys(row).find(k => k.includes('總次數') || k.includes('count'));
+            
+            if (nameKey && countKey) {
+              const name = row[nameKey];
+              const count = parseInt(row[countKey]);
+              if (name && !isNaN(count)) {
+                stats[name] = count;
+              }
+            }
+          });
+          return stats;
+        };
+
+        // ==========================================
+        // 主應用程式
+        // ==========================================
+
+        function App() {
+          const [currentView, setCurrentView] = useState('login'); 
+          const [name, setName] = useState('');
+          const [loginError, setLoginError] = useState('');
+          const [swapRequest, setSwapRequest] = useState(null); 
+          
+          const [scheduleData, setScheduleData] = useState(DEFAULT_SCHEDULE);
+          const [peopleData, setPeopleData] = useState(DEFAULT_PEOPLE_DATA);
+          const [statsData, setStatsData] = useState(DEFAULT_STATS);
+          
+          const [isSyncing, setIsSyncing] = useState(false);
+          const [syncStatus, setSyncStatus] = useState('');
+          const [debugInfo, setDebugInfo] = useState({ scheduleCount: 0, peopleCount: 0, apiError: null });
+
+          useEffect(() => {
+            const loadAllData = async () => {
+              setIsSyncing(true);
+              setSyncStatus('正在請求資料...');
+              setDebugInfo({ scheduleCount: 0, peopleCount: 0, apiError: null });
+              
+              try {
+                const [resSchedule, resData, resStats] = await Promise.all([
+                  fetch(`${API_URL}?type=schedule`).then(r => r.json()),
+                  fetch(`${API_URL}?type=fileData`).then(r => r.json()),
+                  fetch(`${API_URL}?type=stats`).then(r => r.json())
+                ]);
+
+                let sCount = 0, pCount = 0;
+
+                if (resSchedule.status === 'success' && resSchedule.data) {
+                  const processedSchedule = sheetToObjects(resSchedule.data);
+                  setScheduleData(processedSchedule);
+                  sCount = processedSchedule.length;
+                }
+
+                if (resData.status === 'success' && resData.data) {
+                  const objData = sheetToObjects(resData.data);
+                  const processedPeople = processPeopleData(objData);
+                  setPeopleData(processedPeople);
+                  pCount = processedPeople.length;
+                }
+
+                if (resStats.status === 'success' && resStats.data) {
+                  const objStats = sheetToObjects(resStats.data);
+                  setStatsData(processStatsData(objStats));
+                }
+
+                setDebugInfo({ scheduleCount: sCount, peopleCount: pCount, apiError: null });
+                
+                if (sCount > 0 && pCount > 0) {
+                  setSyncStatus(`同步成功`);
+                } else {
+                  setSyncStatus('同步完成，但資料可能有缺漏');
+                }
+
+              } catch (err) {
+                console.error("同步失敗", err);
+                setSyncStatus('連線發生錯誤');
+                setDebugInfo(prev => ({ ...prev, apiError: err.message }));
+              } finally {
+                setIsSyncing(false);
+              }
             };
 
-            const handleRequestSwap = (request) => {
-                setSwapRequest(request);
-                setView('swapSearch');
-            };
+            loadAllData();
+          }, []);
+          
+          const handleLogin = (e) => {
+            e.preventDefault();
+            setLoginError('');
+            const trimmedName = name.trim();
+            
+            if (!trimmedName) {
+              setLoginError('請輸入姓名');
+              return;
+            }
 
-            return (
-                <div className="font-sans text-slate-900">
-                    {view === 'login' && (
-                        <LoginView 
-                            name={name} setName={setName} 
-                            onLogin={handleLogin} loginError={loginError}
-                            isSyncing={isSyncing} syncStatus={syncStatus} 
-                        />
-                    )}
-                    {view === 'mySchedule' && (
-                        <MyScheduleView 
-                            name={name} 
-                            scheduleData={scheduleData}
-                            onLogout={() => { setName(''); setView('login'); }}
-                            onRequestSwap={handleRequestSwap}
-                        />
-                    )}
-                    {view === 'swapSearch' && (
-                        <SwapSearchView 
-                            name={name}
-                            scheduleData={scheduleData}
-                            peopleData={peopleData}
-                            statsData={statsData}
-                            initialRequest={swapRequest}
-                            onBack={() => setView('mySchedule')}
-                        />
-                    )}
-                </div>
-            );
+            const userExists = peopleData.some(person => person.name && person.name.trim() === trimmedName);
+
+            if (userExists) {
+              setCurrentView('mySchedule');
+            } else {
+              setLoginError('找不到此姓名，請確認是否輸入正確或資料尚未同步。');
+            }
+          };
+
+          const handleLogout = () => {
+            setName('');
+            setLoginError('');
+            setSwapRequest(null);
+            setCurrentView('login');
+          };
+
+          const renderView = () => {
+            switch (currentView) {
+              case 'login':
+                return <LoginView name={name} setName={setName} onLogin={handleLogin} loginError={loginError} isSyncing={isSyncing} syncStatus={syncStatus} debugInfo={debugInfo} />;
+              case 'mySchedule':
+                return <MyScheduleView 
+                         name={name} 
+                         scheduleData={scheduleData}
+                         onLogout={handleLogout} 
+                         onRequestSwap={(req) => { setSwapRequest(req); setCurrentView('swapSearch'); }} 
+                       />;
+              case 'swapSearch':
+                return <SwapSearchView 
+                         name={name} 
+                         scheduleData={scheduleData}
+                         peopleData={peopleData}
+                         statsData={statsData}
+                         onBack={() => setCurrentView('mySchedule')} 
+                         onLogout={handleLogout}
+                         initialRequest={swapRequest} 
+                       />;
+              default:
+                return <LoginView name={name} setName={setName} onLogin={handleLogin} loginError={loginError} />;
+            }
+          };
+
+          return (
+            <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+              {renderView()}
+            </div>
+          );
         }
 
+        // 1. 登入畫面
+        function LoginView({ name, setName, onLogin, loginError, isSyncing, syncStatus, debugInfo }) {
+          return (
+            <div className="min-h-screen flex items-center justify-center p-6 bg-slate-100">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md p-10 border border-white">
+                <div className="text-center mb-10">
+                  <div className="bg-indigo-600 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-indigo-200 rotate-3">
+                    <Calendar className="w-12 h-12 text-white" />
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">
+          TBC 崇拜服事查詢系統</h2>
+
+                  <p className="text-slate-400 mt-2 font-medium">輸入完整姓名</p>
+                </div>
+                
+                <form onSubmit={onLogin} className="space-y-4">
+                  <div className="relative">
+                    <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 w-6 h-6" />
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full pl-14 pr-6 py-5 rounded-2xl border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none transition-all text-xl font-bold placeholder:text-slate-300"
+                      placeholder="例如：張小明"
+                      autoComplete="off"
+                      required
+                    />
+                  </div>
+                  
+                  {loginError && (
+                    <div className="flex items-center gap-2 text-red-500 bg-red-50 p-3 rounded-xl text-sm font-bold animate-in fade-in slide-in-from-top-1">
+                      <AlertCircle size={16} />
+                      <span>{loginError}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 rounded-2xl shadow-lg shadow-indigo-100 transition-all active:scale-95 text-lg"
+                  >
+                    登入系統
+                  </button>
+                </form>
+
+                <div className="mt-8 pt-6 border-t border-slate-100">
+                   <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-400 mb-2">
+                     <Activity size={14} /> 系統狀態
+                   </div>
+                   <div className={`p-3 rounded-xl text-center text-xs font-bold ${syncStatus.includes('失敗') || syncStatus.includes('錯誤') ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                     {isSyncing ? (
+                       <span className="flex items-center justify-center gap-2">
+                         <RefreshCw size={12} className="animate-spin" /> 載入資料中...
+                       </span>
+                     ) : syncStatus}
+                   </div>
+                   
+                   {!isSyncing && (debugInfo.scheduleCount === 0 || debugInfo.apiError) && (
+                     <div className="mt-2 p-2 bg-slate-50 rounded-lg text-[10px] text-slate-500 text-left">
+                        <p className="font-bold mb-1 text-red-400">除錯資訊：</p>
+                        <p>排班資料: {debugInfo.scheduleCount} 筆</p>
+                        <p>人員資料: {debugInfo.peopleCount} 筆</p>
+                        {debugInfo.apiError && <p>API 錯誤: {debugInfo.apiError}</p>}
+                        <p className="mt-1 opacity-70">請確認 GAS 已部署為「任何人」可讀取，且 API 回傳格式正確。</p>
+                     </div>
+                   )}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // 2. 我的班表 (修改：一列顯示一個崗位，執事合併，移除日期方塊)
+        function MyScheduleView({ name, scheduleData, onLogout, onRequestSwap }) {
+          const [flatShifts, setFlatShifts] = useState([]);
+
+          useEffect(() => {
+            const searchName = name.trim();
+            const tempShifts = [];
+
+            // 1. 蒐集所有服事
+            scheduleData.forEach(row => {
+              const dateStr = normalizeDateStr(row['日期']);
+              if (!dateStr) return;
+
+              const dateObj = parseDateObj(row['日期']);
+              const session = row['堂別'];
+
+              Object.keys(row).forEach(key => {
+                if (['堂別', '日期'].includes(key)) return;
+                const cellValue = String(row[key] || '');
+                if (cellValue.includes(searchName)) {
+                   tempShifts.push({
+                     date: dateStr,
+                     dateObj: dateObj,
+                     role: key,
+                     session: session,
+                     rawSession: session 
+                   });
+                }
+              });
+            });
+
+            // 2. 處理「執事輪值」合併邏輯 (同一天不同堂別合併)
+            const shiftsMap = new Map();
+
+            tempShifts.forEach(shift => {
+               if (shift.role === '執事輪值') {
+                 const key = `${shift.date}|${shift.role}`;
+                 if (shiftsMap.has(key)) {
+                   const existing = shiftsMap.get(key);
+                   // 合併堂別，避免重複
+                   if (!existing.session.includes(shift.session)) {
+                     existing.session += `, ${shift.session}`;
+                   }
+                 } else {
+                   // 複製物件以避免參照問題
+                   shiftsMap.set(key, { ...shift });
+                 }
+               } else {
+                 // 其他崗位不合併，使用 unique key
+                 const key = `${shift.date}|${shift.role}|${shift.session}`;
+                 shiftsMap.set(key, { ...shift });
+               }
+            });
+
+            const mergedShifts = Array.from(shiftsMap.values());
+
+            // 3. 排序：日期 -> 堂別
+            mergedShifts.sort((a, b) => {
+              if (a.dateObj.getTime() !== b.dateObj.getTime()) {
+                return a.dateObj.getTime() - b.dateObj.getTime();
+              }
+              return a.session.localeCompare(b.session);
+            });
+
+            setFlatShifts(mergedShifts);
+          }, [name, scheduleData]);
+
+          return (
+            <div className="min-h-screen bg-slate-50 flex flex-col">
+              <nav className="bg-white sticky top-0 z-50 border-b border-slate-100 px-6 py-4 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="bg-indigo-100 p-2 rounded-xl text-indigo-600">
+                    <User size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">system user</p>
+                    <h2 className="text-lg font-black text-slate-800 leading-none">{name}</h2>
+                  </div>
+                </div>
+                <button 
+                  onClick={onLogout} 
+                  className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-xl text-slate-500 font-bold hover:text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  <LogOut size={18}/>
+                  <span>登出</span>
+                </button>
+              </nav>
+
+              <main className="flex-grow p-6 space-y-4 max-w-2xl mx-auto w-full">
+                <div className="flex items-center gap-2 mb-2">
+                  <Calendar className="text-indigo-500" size={20} />
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-800">本季崇拜服事安排</h3>
+                </div>
+
+                {flatShifts.length > 0 ? (
+                  flatShifts.map((shift, index) => {
+                    const dateParts = shift.date.split('/');
+                    const year = dateParts[0];
+                    const month = dateParts[1] || '?';
+                    const day = dateParts[2] || '?';
+                    const fullDate = `${year}/${month}/${day}`; 
+                    const rConfig = ROLE_CONFIG[shift.role] || ROLE_CONFIG['預設'];
+                    const textColorClass = rConfig.color.split(' ')[1] || 'text-slate-800';
+                    
+                    return (
+                      <div key={index} className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-200 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500" style={{animationDelay: `${index * 50}ms`}}>
+                        
+                        {/* 資訊區塊 (移除方形日期，改為清單顯示) */}
+                        <div className="flex flex-col gap-1 flex-grow">
+                           {/* 崗位名稱：醒目顏色 */}
+                           <span className={`text-xl font-black tracking-tight leading-tight ${textColorClass}`}>
+                             {shift.role}
+                           </span>
+                           
+                           {/* 完整日期 | 堂別 */}
+                           <div className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-500">
+                              <div className="flex items-center gap-1.5">
+                                 <Calendar size={14} className="text-slate-400"/>
+                                 <span>{fullDate}</span>
+                              </div>
+                              <span className="text-slate-300">|</span>
+                              <span className="bg-slate-100 px-2 py-0.5 rounded text-xs">{shift.session}</span>
+                           </div>
+                        </div>
+
+                        {/* 右側：換班按鈕 */}
+                        <button 
+                          onClick={() => onRequestSwap({ date: shift.date, role: shift.role, session: shift.rawSession, owner: name })}
+                          className="flex flex-col items-center justify-center gap-1 bg-white hover:bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl transition-all active:scale-95 border-2 border-emerald-100 flex-shrink-0 shadow-sm"
+                        >
+                          <RefreshCw size={18} />
+                          <span className="text-[10px] font-bold">換班查詢</span>
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-20 bg-white rounded-[2rem] border-2 border-dashed border-slate-200">
+                    <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
+                      <Briefcase size={40} />
+                    </div>
+                    <p className="text-slate-400 font-bold text-lg">查無資料</p>
+                    <p className="text-slate-300 text-sm mt-1">請確認姓名輸入正確，或等待資料同步完成。</p>
+                  </div>
+                )}
+              </main>
+            </div>
+          );
+        }
+
+        // 3. 換班查詢畫面
+        function SwapSearchView({ name, scheduleData, peopleData, statsData, onBack, onLogout, initialRequest }) {
+          const availableDates = useMemo(() => {
+            const dates = [...new Set(scheduleData.map(s => s['日期']))];
+            return dates.sort((a, b) => parseDateObj(a) - parseDateObj(b));
+          }, [scheduleData]);
+
+          const [selectedDate, setSelectedDate] = useState(initialRequest?.date || '');
+          const [selectedRole, setSelectedRole] = useState(initialRequest?.role || '');
+          const [selectedSession, setSelectedSession] = useState(initialRequest?.session || '');
+          const [targetOwner, setTargetOwner] = useState(initialRequest?.owner || name);
+          const [candidates, setCandidates] = useState(null);
+
+          // 當請求傳入時，自動執行搜尋
+          useEffect(() => {
+            if (initialRequest) {
+              setSelectedDate(initialRequest.date);
+              setSelectedRole(initialRequest.role);
+              setSelectedSession(initialRequest.session);
+              setTargetOwner(initialRequest.owner || name);
+              performSearch(initialRequest.date, initialRequest.role, initialRequest.session, initialRequest.owner || name);
+            }
+          }, [initialRequest, scheduleData, peopleData, statsData]);
+
+          const performSearch = (sDate, sRole, sSession, sOwner) => {
+            if (!sDate || !sRole) return;
+
+            const targetDateNorm = normalizeDateStr(sDate);
+            const targetDatePadded = formatDatePadded(sDate); 
+
+            const schedulesOnDate = scheduleData.filter(s => normalizeDateStr(s['日期']) === targetDateNorm);
+
+            // 1. 準備申請人(requester)的資訊
+            const requester = peopleData.find(p => p.name === sOwner);
+            const requesterUnavailableDates = requester && requester.unavailable 
+              ? String(requester.unavailable).split(/,|、|，|\s+/).map(d => d.trim()) 
+              : [];
+            
+            const requesterBusyDates = new Set();
+            scheduleData.forEach(row => {
+               Object.keys(row).forEach(key => {
+                 if (['堂別', '日期'].includes(key)) return;
+                 if (String(row[key]).includes(sOwner)) {
+                   requesterBusyDates.add(normalizeDateStr(row['日期']));
+                 }
+               });
+            });
+
+            let potentialCandidates = [];
+
+            peopleData.forEach(person => {
+              // 排除當前需要被換班的人 (sOwner)
+              if (person.name === sOwner) return;
+
+              if (person.willingness && (person.willingness.includes('短暫休息') || person.willingness.includes('暫停服事'))) {
+                return;
+              }
+
+              if (!person.roles[sRole] || person.roles[sRole] !== 'O') return;
+
+              // 特殊邏輯：只有「執事輪值」忽略堂別
+              if (sRole !== '執事輪值') {
+                 if (person.session !== '皆可' && person.session !== sSession) return;
+              }
+
+              if (person.unavailable) {
+                const unavailableDates = String(person.unavailable).split(/,|、|，|\s+/).map(d => d.trim());
+                const isUnavailable = unavailableDates.some(d => {
+                   return d.includes(sDate) || d.includes(targetDatePadded) || d.includes(targetDateNorm);
+                });
+                if (isUnavailable) return;
+              }
+
+              let isBusy = false;
+              schedulesOnDate.forEach(schedule => {
+                Object.keys(schedule).forEach(key => {
+                  if (['堂別', '日期'].includes(key)) return;
+                  if (String(schedule[key]).includes(person.name)) {
+                    isBusy = true;
+                  }
+                });
+              });
+              if (isBusy) return;
+
+              // 計算可交換日期
+              const swapBackOptionsRaw = [];
+              scheduleData.forEach(row => {
+                 const rowDateNorm = normalizeDateStr(row['日期']);
+                 const rowDatePadded = formatDatePadded(row['日期']);
+                 
+                 if (rowDateNorm === targetDateNorm) return;
+
+                 let candidateRoleOnDate = null;
+                 let candidateSessionOnDate = null;
+                 Object.keys(row).forEach(key => {
+                    if (['堂別', '日期'].includes(key)) return;
+                    if (String(row[key]).includes(person.name)) {
+                       candidateRoleOnDate = key;
+                       candidateSessionOnDate = row['堂別'];
+                    }
+                 });
+
+                 if (candidateRoleOnDate) {
+                    if (requesterBusyDates.has(rowDateNorm)) return;
+
+                    const isRequesterUnavailable = requesterUnavailableDates.some(d => 
+                       d.includes(rowDateNorm) || d.includes(rowDatePadded)
+                    );
+                    if (isRequesterUnavailable) return;
+
+                    if (requester && requester.roles[candidateRoleOnDate] === 'O') {
+                       if (candidateRoleOnDate !== '執事輪值') {
+                          if (requester.session !== '皆可' && requester.session !== candidateSessionOnDate) return;
+                       }
+
+                       swapBackOptionsRaw.push({
+                         date: rowDateNorm,
+                         role: candidateRoleOnDate,
+                         session: candidateSessionOnDate,
+                         ts: parseDateObj(row['日期']).getTime()
+                       });
+                    }
+                 }
+              });
+
+              // 合併「執事輪值」的可交換日期
+              const swapBackOptions = [];
+              const deaconDateMap = new Map();
+
+              swapBackOptionsRaw.forEach(opt => {
+                if (opt.role === '執事輪值') {
+                  if (deaconDateMap.has(opt.date)) {
+                    const idx = deaconDateMap.get(opt.date);
+                    if (!swapBackOptions[idx].session.includes(opt.session)) {
+                       swapBackOptions[idx].session += `, ${opt.session}`;
+                    }
+                  } else {
+                    deaconDateMap.set(opt.date, swapBackOptions.length);
+                    swapBackOptions.push(opt);
+                  }
+                } else {
+                  swapBackOptions.push(opt);
+                }
+              });
+              swapBackOptions.sort((a, b) => a.ts - b.ts);
+
+
+              potentialCandidates.push({
+                name: person.name,
+                session: person.session,
+                stats: statsData[person.name] || 0,
+                swapDates: swapBackOptions
+              });
+            });
+
+            potentialCandidates.sort((a, b) => a.stats - b.stats);
+            const uniqueCandidates = Array.from(new Map(potentialCandidates.map(item => [item.name, item])).values());
+            
+            setCandidates(uniqueCandidates);
+          };
+
+          return (
+            <div className="min-h-screen bg-slate-50 flex flex-col">
+              <nav className="bg-white sticky top-0 z-50 border-b border-slate-100 px-6 py-4 flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                  <button onClick={onBack} className="bg-slate-100 p-2 rounded-xl text-slate-600 hover:bg-slate-200 transition-colors">
+                    <ArrowLeft size={20}/>
+                  </button>
+                  <div>
+                    <h2 className="text-xl font-black text-slate-800">上一頁</h2>
+                    </div>
+                </div>
+                <button 
+                  onClick={onLogout} 
+                  className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-xl text-slate-500 font-bold hover:text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  <LogOut size={18}/>
+                  <span>登出</span>
+                </button>
+              </nav>
+
+              <main className="flex-grow p-6 space-y-6 max-w-2xl mx-auto w-full">
+                
+                {/* 資訊顯示卡 */}
+                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
+                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">幫今天的服事找合適人選：</h3>
+                   <div className="flex items-center gap-4">
+                      <div className="bg-indigo-50 p-4 rounded-2xl text-indigo-600">
+                         <Calendar size={28} />
+                      </div>
+                      <div>
+                         <p className="text-2xl font-black text-slate-800">{normalizeDateStr(selectedDate)}</p>
+                         <div className="flex items-center gap-2 mt-1">
+                            <span className="text-sm font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">{selectedRole}</span>
+                            {selectedRole !== '執事輪值' && (
+                              <span className="text-sm font-bold text-slate-400">• {selectedSession}</span>
+                            )}
+                         </div>
+                      </div>
+                   </div>
+                </div>
+
+                {candidates && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="flex items-center justify-between px-2">
+                      <h3 className="font-black text-slate-700 flex items-center gap-2">
+                        <UserCheck className="text-emerald-500" /> 推薦人選 ({candidates.length})
+                      </h3>
+                      <span className="text-[10px] bg-slate-200 text-slate-500 px-2 py-1 rounded">依服事次數排序</span>
+                    </div>
+
+                    {candidates.length > 0 ? (
+                      candidates.map((person, idx) => {
+                        const hasSwapOptions = person.swapDates && person.swapDates.length > 0;
+                        
+                        return (
+                          <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm transition-all hover:shadow-md">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-white shadow-md ${idx < 3 ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                                  {idx + 1}
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-xl font-black text-slate-800">{person.name}</p>
+                                    {/* 狀態標籤 */}
+                                    {hasSwapOptions ? (
+                                      <span className="flex items-center gap-1 text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full border border-indigo-100">
+                                        <ArrowLeftRight size={10} /> 換班
+                                      </span>
+                                    ) : (
+                                      <span className="flex items-center gap-1 text-[10px] font-bold bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full border border-orange-100">
+                                        <HandHeart size={10} /> 替補
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mt-1">
+                                    <span className="bg-slate-100 px-1.5 py-0.5 rounded">{person.session}</span>
+                                    <span>•</span>
+                                    <span>本季服事 {person.stats} 次</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 顯示可交換日期 */}
+                            {hasSwapOptions ? (
+                              <div className="mt-4 pt-3 border-t border-slate-50">
+                                <p className="text-[10px] font-bold text-slate-400 mb-2 flex items-center gap-1">
+                                  <RefreshCw size={10} /> 
+                                  雙方可以換班日期 (互換班次)：
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  {person.swapDates.map((swap, i) => (
+                                    <div key={i} className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg border border-indigo-100 flex items-center gap-1">
+                                      <span className="font-bold">{swap.date}</span>
+                                      <span className="text-[10px] opacity-70">({swap.role})</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="mt-4 pt-3 border-t border-slate-50 text-xs text-slate-400">
+                                <span className="font-bold">沒有適合的換班日期，但他可能可以幫你頂一下。</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-10 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">
+                        <UserX className="mx-auto mb-4 opacity-30" size={48} />
+                        <p className="font-bold text-lg text-slate-500">找不到人選</p>
+                        <p className="text-sm mt-1 opacity-70">當天大家可能都已排班，或無人具備此崗位技能。</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </main>
+            </div>
+          );
+        }
+
+        // 啟動 React
         const container = document.getElementById('root');
         const root = createRoot(container);
         root.render(<App />);
+
     </script>
 </body>
 </html>
