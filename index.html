@@ -320,12 +320,10 @@
           );
         }
 
-        // 2. My Schedule View (已修改：支援自動編號)
+        // 2. My Schedule View (已美化：圓圈數字編號)
         function MyScheduleView({ name, scheduleData, onLogout, onRequestSwap }) {
           const [flatShifts, setFlatShifts] = useState([]);
-          
-          // ★★★ 設定哪些崗位需要加編號 ★★★
-          const numberedRoles = ['接待', '收奉獻', '主餐'];
+          const numberedRoles = ['接待', '收奉獻', '主餐']; // 需要編號的崗位
 
           useEffect(() => {
             const searchName = name.trim();
@@ -341,23 +339,19 @@
                 const cellValue = String(val || '');
                 
                 if (cellValue.includes(searchName)) {
-                   // ★★★ 新增：自動編號邏輯 ★★★
-                   let displayRole = key;
+                   // 計算編號邏輯
+                   let shiftNumber = null;
                    if (numberedRoles.includes(key)) {
-                       // 將儲存格內容分割 (支援頓號、逗號、空白)
                        const names = cellValue.split(/,|、|，|\s+/).map(n => n.trim()).filter(n => n);
                        const idx = names.indexOf(searchName);
-                       if (idx !== -1) {
-                           // 顯示為： 1. 接待
-                           displayRole = `${idx + 1}. ${key}`;
-                       }
+                       if (idx !== -1) shiftNumber = idx + 1;
                    }
 
                    tempShifts.push({ 
                        date: dateStr, 
                        dateObj: dateObj, 
-                       role: displayRole, // 顯示用 (有編號)
-                       originalRole: key, // 邏輯用 (無編號，用來找顏色配置)
+                       role: key,
+                       shiftNumber: shiftNumber, // 儲存編號
                        session: session, 
                        rawSession: session 
                    });
@@ -366,8 +360,8 @@
             });
             const shiftsMap = new Map();
             tempShifts.forEach(shift => {
-               if (shift.originalRole === '執事輪值') {
-                 const key = `${shift.date}|${shift.originalRole}`;
+               if (shift.role === '執事輪值') {
+                 const key = `${shift.date}|${shift.role}`;
                  if (shiftsMap.has(key)) {
                    const existing = shiftsMap.get(key);
                    if (!existing.session.includes(shift.session)) existing.session += `, ${shift.session}`;
@@ -375,7 +369,7 @@
                    shiftsMap.set(key, { ...shift });
                  }
                } else {
-                 const key = `${shift.date}|${shift.originalRole}|${shift.session}`;
+                 const key = `${shift.date}|${shift.role}|${shift.session}`;
                  shiftsMap.set(key, { ...shift });
                }
             });
@@ -410,22 +404,30 @@
                   flatShifts.map((shift, index) => {
                     const dateParts = shift.date.split('/');
                     const fullDate = `${dateParts[0]}/${dateParts[1] || '?'}/${dateParts[2] || '?'}`; 
-                    // ★ 使用 originalRole 來找顏色，避免因為加了 "1." 而找不到設定
-                    const rConfig = ROLE_CONFIG[shift.originalRole] || ROLE_CONFIG['預設'];
+                    const rConfig = ROLE_CONFIG[shift.role] || ROLE_CONFIG['預設'];
                     const textColorClass = rConfig.color.split(' ')[1] || 'text-slate-800';
                     
                     return (
                       <div key={index} className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-200 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500" style={{animationDelay: `${index * 50}ms`}}>
                         <div className="flex flex-col gap-1 flex-grow">
-                           {/* ★ 顯示 shift.role (有編號的版本) */}
-                           <span className={`text-xl font-black tracking-tight leading-tight ${textColorClass}`}>{shift.role}</span>
+                           {/* 崗位名稱 + 圓圈數字美化 */}
+                           <span className={`text-xl font-black tracking-tight leading-tight ${textColorClass} flex items-center gap-2`}>
+                             {/* 如果有編號，顯示精緻的空心圓圈 */}
+                             {shift.shiftNumber && (
+                               <span className="flex items-center justify-center w-6 h-6 rounded-full border-2 border-current text-xs font-bold shrink-0">
+                                 {shift.shiftNumber}
+                               </span>
+                             )}
+                             {shift.role}
+                           </span>
+                           
                            <div className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-500">
                               <div className="flex items-center gap-1.5"><Calendar size={14} className="text-slate-400"/><span>{fullDate}</span></div>
                               <span className="text-slate-300">|</span>
                               <span className="bg-slate-100 px-2 py-0.5 rounded text-xs">{shift.session}</span>
                            </div>
                         </div>
-                        <button onClick={() => onRequestSwap({ date: shift.date, role: shift.originalRole, session: shift.rawSession, owner: name })} className="flex flex-col items-center justify-center gap-1 bg-white hover:bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl transition-all active:scale-95 border-2 border-emerald-100 flex-shrink-0 shadow-sm">
+                        <button onClick={() => onRequestSwap({ date: shift.date, role: shift.role, session: shift.rawSession, owner: name })} className="flex flex-col items-center justify-center gap-1 bg-white hover:bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl transition-all active:scale-95 border-2 border-emerald-100 flex-shrink-0 shadow-sm">
                           <RefreshCw size={18} /><span className="text-[10px] font-bold">換班查詢</span>
                         </button>
                       </div>
