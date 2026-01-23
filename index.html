@@ -320,7 +320,7 @@
           );
         }
 
-        // 2. My Schedule View (已美化：圓圈數字編號)
+        // 2. My Schedule View (已修改：圈圈編號在右側)
         function MyScheduleView({ name, scheduleData, onLogout, onRequestSwap }) {
           const [flatShifts, setFlatShifts] = useState([]);
           const numberedRoles = ['接待', '收奉獻', '主餐']; // 需要編號的崗位
@@ -351,7 +351,7 @@
                        date: dateStr, 
                        dateObj: dateObj, 
                        role: key,
-                       shiftNumber: shiftNumber, // 儲存編號
+                       shiftNumber: shiftNumber,
                        session: session, 
                        rawSession: session 
                    });
@@ -410,15 +410,15 @@
                     return (
                       <div key={index} className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-200 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500" style={{animationDelay: `${index * 50}ms`}}>
                         <div className="flex flex-col gap-1 flex-grow">
-                           {/* 崗位名稱 + 圓圈數字美化 */}
+                           {/* 崗位名稱 + 圓圈數字美化 (數字移到右邊) */}
                            <span className={`text-xl font-black tracking-tight leading-tight ${textColorClass} flex items-center gap-2`}>
+                             {shift.role}
                              {/* 如果有編號，顯示精緻的空心圓圈 */}
                              {shift.shiftNumber && (
                                <span className="flex items-center justify-center w-6 h-6 rounded-full border-2 border-current text-xs font-bold shrink-0">
                                  {shift.shiftNumber}
                                </span>
                              )}
-                             {shift.role}
                            </span>
                            
                            <div className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-500">
