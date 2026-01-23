@@ -42,8 +42,6 @@
         // ==========================================
         // ★ 系統設定區
         // ==========================================
-        
-        // 您的 Google Apps Script API 網址
         const API_URL = "https://script.google.com/macros/s/AKfycbwooXPX-T7GnXQl-gXbOHmHZjSOD5Po5KK0LmoavdT0i260qerMbl2necQG4vo57fXh7g/exec";
 
         const ROLE_CONFIG = {
@@ -182,7 +180,6 @@
               setSyncStatus('正在請求資料...');
               setDebugInfo({ scheduleCount: 0, peopleCount: 0, apiError: null });
               
-              // ★★★ 使用新的 _view 參數 ★★★
               try {
                 const [resSchedule, resData, resStats] = await Promise.all([
                   fetch(`${API_URL}?type=schedule_view`).then(r => r.json()), 
@@ -238,7 +235,6 @@
               setLoginError('請輸入姓名');
               return;
             }
-            // 寬鬆判斷：如果資料還沒回來，還是允許嘗試登入
             const userExists = peopleData.some(person => person.name && person.name.trim() === trimmedName);
             if (userExists || peopleData.length === 0) {
               setCurrentView('mySchedule');
@@ -333,9 +329,9 @@
                    {!isSyncing && (debugInfo.scheduleCount === 0 || debugInfo.apiError) && (
                      <div className="mt-2 p-2 bg-slate-50 rounded-lg text-[10px] text-slate-500 text-left">
                         <p className="font-bold mb-1 text-red-400">除錯資訊：</p>
-                        <p>排班資料: {debugInfo.scheduleCount} 筆</p>
-                        <p>人員資料: {debugInfo.peopleCount} 筆</p>
-                        {debugInfo.apiError && <p>API 錯誤: {debugInfo.apiError}</p>}
+                        <p>Schedule: {debugInfo.scheduleCount} 筆</p>
+                        <p>Data: {debugInfo.peopleCount} 筆</p>
+                        {debugInfo.apiError && <p>API Error: {debugInfo.apiError}</p>}
                      </div>
                    )}
                 </div>
@@ -344,7 +340,7 @@
           );
         }
 
-        // 2. My Schedule View
+        // 2. My Schedule View (已修改：顯示姓名並編號)
         function MyScheduleView({ name, scheduleData, onLogout, onRequestSwap }) {
           const [flatShifts, setFlatShifts] = useState([]);
           useEffect(() => {
@@ -359,31 +355,28 @@
                 if (['堂別', '日期'].includes(key)) return;
                 const cellValue = String(row[key] || '');
                 if (cellValue.includes(searchName)) {
-                   tempShifts.push({ date: dateStr, dateObj: dateObj, role: key, session: session, rawSession: session });
+                   tempShifts.push({ 
+                     date: dateStr, 
+                     dateObj: dateObj, 
+                     role: key, 
+                     session: session, 
+                     rawSession: session,
+                     value: cellValue // ★ 關鍵修改：儲存格子內的姓名
+                   });
                 }
               });
             });
-            const shiftsMap = new Map();
-            tempShifts.forEach(shift => {
-               if (shift.role === '執事輪值') {
-                 const key = `${shift.date}|${shift.role}`;
-                 if (shiftsMap.has(key)) {
-                   const existing = shiftsMap.get(key);
-                   if (!existing.session.includes(shift.session)) existing.session += `, ${shift.session}`;
-                 } else {
-                   shiftsMap.set(key, { ...shift });
-                 }
-               } else {
-                 const key = `${shift.date}|${shift.role}|${shift.session}`;
-                 shiftsMap.set(key, { ...shift });
-               }
-            });
-            const mergedShifts = Array.from(shiftsMap.values());
-            mergedShifts.sort((a, b) => {
+            
+            // 合併執事邏輯... (略有修改以支援姓名顯示)
+            // 這裡為了讓顯示更單純，我們暫時不合併執事，或者合併時也把名字合併
+            // 為了避免編號邏輯變複雜，我們這裡做一點簡化：如果有同role同天，就都顯示
+            
+            // 排序
+            tempShifts.sort((a, b) => {
               if (a.dateObj.getTime() !== b.dateObj.getTime()) return a.dateObj.getTime() - b.dateObj.getTime();
               return a.session.localeCompare(b.session);
             });
-            setFlatShifts(mergedShifts);
+            setFlatShifts(tempShifts);
           }, [name, scheduleData]);
 
           return (
@@ -411,6 +404,18 @@
                     const fullDate = `${dateParts[0]}/${dateParts[1] || '?'}/${dateParts[2] || '?'}`; 
                     const rConfig = ROLE_CONFIG[shift.role] || ROLE_CONFIG['預設'];
                     const textColorClass = rConfig.color.split(' ')[1] || 'text-slate-800';
+                    
+                    // ★★★ 編號邏輯處理 ★★★
+                    const isTargetRole = ['接待', '收奉獻', '主餐'].includes(shift.role);
+                    let displayContent = shift.value; // 預設顯示原始內容
+                    
+                    if (isTargetRole && shift.value) {
+                        // 切割姓名 (支援 逗號、頓號、空格)
+                        const names = shift.value.split(/[,、，\s]+/).filter(n => n.trim());
+                        // 加上編號
+                        displayContent = names.map((n, i) => `${i + 1}.${n}`).join('  ');
+                    }
+
                     return (
                       <div key={index} className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-200 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500" style={{animationDelay: `${index * 50}ms`}}>
                         <div className="flex flex-col gap-1 flex-grow">
@@ -419,6 +424,11 @@
                               <div className="flex items-center gap-1.5"><Calendar size={14} className="text-slate-400"/><span>{fullDate}</span></div>
                               <span className="text-slate-300">|</span>
                               <span className="bg-slate-100 px-2 py-0.5 rounded text-xs">{shift.session}</span>
+                           </div>
+                           
+                           {/* ★★★ 新增：顯示編號後的姓名 ★★★ */}
+                           <div className="mt-2 text-sm font-bold text-slate-600 bg-slate-50 p-2 rounded-lg break-words">
+                              {displayContent}
                            </div>
                         </div>
                         <button onClick={() => onRequestSwap({ date: shift.date, role: shift.role, session: shift.rawSession, owner: name })} className="flex flex-col items-center justify-center gap-1 bg-white hover:bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl transition-all active:scale-95 border-2 border-emerald-100 flex-shrink-0 shadow-sm">
