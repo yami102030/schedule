@@ -36,14 +36,12 @@
           Calendar, Clock, User, LogOut, Heart, Monitor, Users, Smile, BookOpen, 
           Coffee, CheckCircle, Info, RefreshCw, Wifi, Database, AlertCircle, 
           ArrowLeft, Search, UserCheck, BarChart, ArrowRight, UserX, Briefcase, Link as LinkIcon, Activity, MessageCircle, Send,
-          ArrowLeftRight, HandHeart, ListOrdered
+          ArrowLeftRight, HandHeart
         } from 'lucide-react';
 
         // ==========================================
         // ★ 系統設定區
         // ==========================================
-        
-        // 您的 Google Apps Script API 網址
         const API_URL = "https://script.google.com/macros/s/AKfycbwooXPX-T7GnXQl-gXbOHmHZjSOD5Po5KK0LmoavdT0i260qerMbl2necQG4vo57fXh7g/exec";
 
         const ROLE_CONFIG = {
@@ -118,16 +116,12 @@
           return rawRows.map(row => {
             const nameKey = Object.keys(row).find(k => k.includes('姓名') || k.toLowerCase() === 'name');
             const name = nameKey ? row[nameKey] : '';
-            
             const sessionKey = Object.keys(row).find(k => k.includes('服事時段') || k.includes('session'));
             const session = sessionKey ? row[sessionKey] : '皆可';
-
             const unavailableKey = Object.keys(row).find(k => k.includes('不能參與') || k.includes('unavailable'));
             const unavailable = unavailableKey ? row[unavailableKey] : '';
-
             const willingnessKey = Object.keys(row).find(k => k.includes('服事意願') || k.includes('willingness'));
             const willingness = willingnessKey ? String(row[willingnessKey]) : '';
-
             const roles = {};
             Object.keys(ROLE_CONFIG).forEach(roleName => {
               const csvKey = Object.keys(row).find(k => k.trim() === roleName);
@@ -138,7 +132,6 @@
                 }
               }
             });
-
             return { name, session, unavailable, willingness, roles };
           }).filter(p => p.name);
         };
@@ -167,11 +160,9 @@
           const [name, setName] = useState('');
           const [loginError, setLoginError] = useState('');
           const [swapRequest, setSwapRequest] = useState(null); 
-          
           const [scheduleData, setScheduleData] = useState(DEFAULT_SCHEDULE);
           const [peopleData, setPeopleData] = useState(DEFAULT_PEOPLE_DATA);
           const [statsData, setStatsData] = useState(DEFAULT_STATS);
-          
           const [isSyncing, setIsSyncing] = useState(false);
           const [syncStatus, setSyncStatus] = useState('');
           const [debugInfo, setDebugInfo] = useState({ scheduleCount: 0, peopleCount: 0, apiError: null });
@@ -181,42 +172,34 @@
               setIsSyncing(true);
               setSyncStatus('正在請求資料...');
               setDebugInfo({ scheduleCount: 0, peopleCount: 0, apiError: null });
-              
               try {
                 const [resSchedule, resData, resStats] = await Promise.all([
-                  fetch(`${API_URL}?type=schedule_view`).then(r => r.json()),
-                  fetch(`${API_URL}?type=data_view`).then(r => r.json()),
-                  fetch(`${API_URL}?type=stats_view`).then(r => r.json())
+                  fetch(`${API_URL}?type=schedule_view`).then(r => r.json()), 
+                  fetch(`${API_URL}?type=data_view`).then(r => r.json()),     
+                  fetch(`${API_URL}?type=stats_view`).then(r => r.json())     
                 ]);
-
                 let sCount = 0, pCount = 0;
-
                 if (resSchedule.status === 'success' && resSchedule.data) {
                   const processedSchedule = sheetToObjects(resSchedule.data);
                   setScheduleData(processedSchedule);
                   sCount = processedSchedule.length;
                 }
-
                 if (resData.status === 'success' && resData.data) {
                   const objData = sheetToObjects(resData.data);
                   const processedPeople = processPeopleData(objData);
                   setPeopleData(processedPeople);
                   pCount = processedPeople.length;
                 }
-
                 if (resStats.status === 'success' && resStats.data) {
                   const objStats = sheetToObjects(resStats.data);
                   setStatsData(processStatsData(objStats));
                 }
-
                 setDebugInfo({ scheduleCount: sCount, peopleCount: pCount, apiError: null });
-                
                 if (sCount > 0 && pCount > 0) {
                   setSyncStatus(`同步成功`);
                 } else {
                   setSyncStatus('同步完成，但資料可能有缺漏');
                 }
-
               } catch (err) {
                 console.error("同步失敗", err);
                 setSyncStatus('連線發生錯誤');
@@ -225,7 +208,6 @@
                 setIsSyncing(false);
               }
             };
-
             loadAllData();
           }, []);
           
@@ -301,13 +283,9 @@
                   <div className="relative">
                     <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 w-6 h-6" />
                     <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      type="text" value={name} onChange={(e) => setName(e.target.value)}
                       className="w-full pl-14 pr-6 py-5 rounded-2xl border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none transition-all text-xl font-bold placeholder:text-slate-300"
-                      placeholder="例如：張小明"
-                      autoComplete="off"
-                      required
+                      placeholder="例如：張小明" autoComplete="off" required
                     />
                   </div>
                   {loginError && (
@@ -342,41 +320,12 @@
           );
         }
 
-        // 2. My Schedule View (修改處：增加自動編號邏輯)
+        // 2. My Schedule View (已修改：支援自動編號)
         function MyScheduleView({ name, scheduleData, onLogout, onRequestSwap }) {
           const [flatShifts, setFlatShifts] = useState([]);
-
-          // ★★★ 新增：格式化名稱函式 ★★★
-          const renderNumberedNames = (role, value) => {
-             const strValue = String(value || '');
-             // 指定需要編號的崗位
-             const NUMBERED_ROLES = ['接待', '收奉獻', '主餐'];
-             
-             // 如果不是指定崗位，直接回傳原始文字
-             if (!NUMBERED_ROLES.includes(role)) {
-                return <span>{strValue}</span>;
-             }
-
-             // 切割字串 (支援 逗號、頓號、空格)
-             const names = strValue.split(/[,、， ]+/).filter(n => n.trim());
-
-             // 如果只有一個人，或沒有人，就不編號
-             if (names.length <= 1) return <span>{strValue}</span>;
-
-             // 多人時，回傳編號列表
-             return (
-               <div className="flex flex-col gap-1 mt-1">
-                 {names.map((n, i) => (
-                   <div key={i} className="flex items-center gap-1.5">
-                     <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold bg-slate-200 text-slate-500 rounded-full">
-                       {i + 1}
-                     </span>
-                     <span>{n}</span>
-                   </div>
-                 ))}
-               </div>
-             );
-          };
+          
+          // ★★★ 設定哪些崗位需要加編號 ★★★
+          const numberedRoles = ['接待', '收奉獻', '主餐'];
 
           useEffect(() => {
             const searchName = name.trim();
@@ -386,26 +335,39 @@
               if (!dateStr) return;
               const dateObj = parseDateObj(row['日期']);
               const session = row['堂別'];
-              Object.keys(row).forEach(key => {
+              
+              Object.entries(row).forEach(([key, val]) => {
                 if (['堂別', '日期'].includes(key)) return;
-                const cellValue = String(row[key] || '');
+                const cellValue = String(val || '');
+                
                 if (cellValue.includes(searchName)) {
-                   // 這裡把原始的 names (cellValue) 存進去，方便後面顯示
+                   // ★★★ 新增：自動編號邏輯 ★★★
+                   let displayRole = key;
+                   if (numberedRoles.includes(key)) {
+                       // 將儲存格內容分割 (支援頓號、逗號、空白)
+                       const names = cellValue.split(/,|、|，|\s+/).map(n => n.trim()).filter(n => n);
+                       const idx = names.indexOf(searchName);
+                       if (idx !== -1) {
+                           // 顯示為： 1. 接待
+                           displayRole = `${idx + 1}. ${key}`;
+                       }
+                   }
+
                    tempShifts.push({ 
                        date: dateStr, 
                        dateObj: dateObj, 
-                       role: key, 
+                       role: displayRole, // 顯示用 (有編號)
+                       originalRole: key, // 邏輯用 (無編號，用來找顏色配置)
                        session: session, 
-                       rawSession: session,
-                       value: cellValue  // ★ 存入名單字串
+                       rawSession: session 
                    });
                 }
               });
             });
             const shiftsMap = new Map();
             tempShifts.forEach(shift => {
-               if (shift.role === '執事輪值') {
-                 const key = `${shift.date}|${shift.role}`;
+               if (shift.originalRole === '執事輪值') {
+                 const key = `${shift.date}|${shift.originalRole}`;
                  if (shiftsMap.has(key)) {
                    const existing = shiftsMap.get(key);
                    if (!existing.session.includes(shift.session)) existing.session += `, ${shift.session}`;
@@ -413,7 +375,7 @@
                    shiftsMap.set(key, { ...shift });
                  }
                } else {
-                 const key = `${shift.date}|${shift.role}|${shift.session}`;
+                 const key = `${shift.date}|${shift.originalRole}|${shift.session}`;
                  shiftsMap.set(key, { ...shift });
                }
             });
@@ -448,25 +410,22 @@
                   flatShifts.map((shift, index) => {
                     const dateParts = shift.date.split('/');
                     const fullDate = `${dateParts[0]}/${dateParts[1] || '?'}/${dateParts[2] || '?'}`; 
-                    const rConfig = ROLE_CONFIG[shift.role] || ROLE_CONFIG['預設'];
+                    // ★ 使用 originalRole 來找顏色，避免因為加了 "1." 而找不到設定
+                    const rConfig = ROLE_CONFIG[shift.originalRole] || ROLE_CONFIG['預設'];
                     const textColorClass = rConfig.color.split(' ')[1] || 'text-slate-800';
+                    
                     return (
                       <div key={index} className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-200 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500" style={{animationDelay: `${index * 50}ms`}}>
                         <div className="flex flex-col gap-1 flex-grow">
+                           {/* ★ 顯示 shift.role (有編號的版本) */}
                            <span className={`text-xl font-black tracking-tight leading-tight ${textColorClass}`}>{shift.role}</span>
                            <div className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-500">
                               <div className="flex items-center gap-1.5"><Calendar size={14} className="text-slate-400"/><span>{fullDate}</span></div>
                               <span className="text-slate-300">|</span>
                               <span className="bg-slate-100 px-2 py-0.5 rounded text-xs">{shift.session}</span>
                            </div>
-                           
-                           {/* ★★★ 新增：顯示名單 (如果是指定崗位則會有編號) ★★★ */}
-                           <div className="mt-2 text-sm font-bold text-slate-700 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                              {renderNumberedNames(shift.role, shift.value)}
-                           </div>
-
                         </div>
-                        <button onClick={() => onRequestSwap({ date: shift.date, role: shift.role, session: shift.rawSession, owner: name })} className="flex flex-col items-center justify-center gap-1 bg-white hover:bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl transition-all active:scale-95 border-2 border-emerald-100 flex-shrink-0 shadow-sm">
+                        <button onClick={() => onRequestSwap({ date: shift.date, role: shift.originalRole, session: shift.rawSession, owner: name })} className="flex flex-col items-center justify-center gap-1 bg-white hover:bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl transition-all active:scale-95 border-2 border-emerald-100 flex-shrink-0 shadow-sm">
                           <RefreshCw size={18} /><span className="text-[10px] font-bold">換班查詢</span>
                         </button>
                       </div>
