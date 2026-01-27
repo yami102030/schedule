@@ -399,7 +399,7 @@
               <main className="flex-grow p-6 space-y-4 max-w-2xl mx-auto w-full">
                 <div className="flex items-center gap-2 mb-2">
                   <Calendar className="text-indigo-500" size={20} />
-                  <h3 className="text-lg sm:text-xl font-bold text-slate-800">本季崇拜服事安排</h3>
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-800">本季崇拜服事明細</h3>
                 </div>
                 {flatShifts.length > 0 ? (
                   flatShifts.map((shift, index) => {
@@ -628,7 +628,7 @@
                                 </div>
                               </div>
                             ) : (
-                              <div className="mt-4 pt-3 border-t border-slate-50 text-xs text-slate-400"><span className="font-bold">沒有適合的換班日期，但他可能可以幫你頂一下。</span></div>
+                              <div className="mt-4 pt-3 border-t border-slate-50 text-xs text-slate-400"><span className="font-bold">雙方沒有適合的換班日期，也許能協助補位支援。</span></div>
                             )}
                           </div>
                         );
