@@ -38,7 +38,7 @@
         } from 'lucide-react';
 
         // ==========================================
-        // ★ 系統設定區
+        // ★ 系統設定
         // ==========================================
         const API_URL = "https://script.google.com/macros/s/AKfycbwooXPX-T7GnXQl-gXbOHmHZjSOD5Po5KK0LmoavdT0i260qerMbl2necQG4vo57fXh7g/exec";
 
@@ -112,10 +112,8 @@
         const processPeopleData = (rawRows) => {
           if (!Array.isArray(rawRows) || rawRows.length === 0) return [];
 
-          // ★★★ DEBUG: 印出系統抓到的欄位名稱，請按 F12 查看 ★★★
-          console.log("【除錯】試算表所有欄位:", Object.keys(rawRows[0]));
-
           return rawRows.map((row, index) => {
+            // 基礎資料
             const nameKey = Object.keys(row).find(k => k.includes('姓名') || k.toLowerCase() === 'name');
             const name = nameKey ? row[nameKey] : '';
             
@@ -128,22 +126,26 @@
             const willingnessKey = Object.keys(row).find(k => k.includes('服事意願') || k.includes('willingness'));
             const willingness = willingnessKey ? String(row[willingnessKey]) : '';
 
-            // ★★★ 修正欄位判斷邏輯 ★★★
-            // 優先找包含「群組」的欄位，其次才找包含「ID」的
-            // 避免抓到「編號(ID)」這種欄位
-            const groupIdKey = Object.keys(row).find(k => k.includes('群組') || k.includes('Group')) 
-                               || Object.keys(row).find(k => k.toUpperCase().includes('ID'));
-            const groupId = groupIdKey ? String(row[groupIdKey]).toUpperCase().trim() : '';
+            // ★★★ 關鍵修正：抓取 B 欄 (Index 1) 和 F 欄 (Index 5) ★★★
+            const keys = Object.keys(row);
+            
+            // 嘗試 1: 找標題關鍵字
+            let groupIdKey = keys.find(k => k.includes('ID') || k.includes('群組'));
+            let session2Key = keys.find(k => k.includes('二堂') || k.includes('2堂') || k.includes('主日'));
 
-            // 優先找包含「二堂」或「2堂」的
-            const session2Key = Object.keys(row).find(k => k.includes('二堂') || k.includes('2堂') || k.includes('主日'));
-            const session2 = session2Key ? String(row[session2Key]).trim() : '';
+            // 嘗試 2: 如果沒找到，強制用位置 (B欄=第2個key, F欄=第6個key)
+            // 注意：Object.keys 的順序通常對應 Excel 欄位順序
+            let rawGroup = groupIdKey ? row[groupIdKey] : (keys.length > 1 ? row[keys[1]] : '');
+            let rawSession2 = session2Key ? row[session2Key] : (keys.length > 5 ? row[keys[5]] : '');
 
-            // ★★★ DEBUG: 印出第一個人的資料，確認有沒有抓對 ★★★
+            const groupId = String(rawGroup || '').toUpperCase().trim(); // 轉大寫 (FA/FB)
+            const session2 = String(rawSession2 || '').trim(); // 轉字串 (1/2)
+
+            // DEBUG: 印出第一個人的資料確認
             if (index === 0) {
-                console.log("【除錯】第一位人員:", name);
-                console.log(` - 抓到群組欄位: [${groupIdKey}], 值: ${groupId}`);
-                console.log(` - 抓到二堂欄位: [${session2Key}], 值: ${session2}`);
+                console.log(`[除錯] 第一人: ${name}`);
+                console.log(` - B欄(群組): 原始=${rawGroup}, 處理後=${groupId}`);
+                console.log(` - F欄(二堂): 原始=${rawSession2}, 處理後=${session2}`);
             }
 
             const roles = {};
@@ -404,186 +406,6 @@
             });
             setFlatShifts(mergedShifts);
           }, [name, scheduleData]);
-
-          return (
-            <div className="min-h-screen bg-slate-50 flex flex-col">
-              <nav className="bg-white sticky top-0 z-50 border-b border-slate-100 px-6 py-4 flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className="bg-indigo-100 p-2 rounded-xl text-indigo-600"><User size={20} /></div>
-                  <div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">system user</p>
-                    <h2 className="text-lg font-black text-slate-800 leading-none">{name}</h2>
-                  </div>
-                </div>
-                <button onClick={onLogout} className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-xl text-slate-500 font-bold hover:text-red-500 hover:bg-red-50 transition-colors">
-                  <LogOut size={18}/><span>登出</span>
-                </button>
-              </nav>
-              <main className="flex-grow p-6 space-y-4 max-w-2xl mx-auto w-full">
-                <div className="flex items-center gap-2 mb-2">
-                  <Calendar className="text-indigo-500" size={20} />
-                  <h3 className="text-lg sm:text-xl font-bold text-slate-800">本季崇拜服事安排</h3>
-                </div>
-                {flatShifts.length > 0 ? (
-                  flatShifts.map((shift, index) => {
-                    const dateParts = shift.date.split('/');
-                    const fullDate = `${dateParts[0]}/${dateParts[1] || '?'}/${dateParts[2] || '?'}`; 
-                    const rConfig = ROLE_CONFIG[shift.role] || ROLE_CONFIG['預設'];
-                    const textColorClass = rConfig.color.split(' ')[1] || 'text-slate-800';
-                    
-                    return (
-                      <div key={index} className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-200 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500" style={{animationDelay: `${index * 50}ms`}}>
-                        <div className="flex flex-col gap-1 flex-grow">
-                           <span className={`text-xl font-black tracking-tight leading-tight ${textColorClass} flex items-center gap-2`}>
-                             {shift.role}
-                             {shift.shiftNumber && (
-                               <span className="flex items-center justify-center w-6 h-6 rounded-full border-2 border-current text-xs font-bold shrink-0">
-                                 {shift.shiftNumber}
-                               </span>
-                             )}
-                           </span>
-                           
-                           <div className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-500">
-                              <div className="flex items-center gap-1.5"><Calendar size={14} className="text-slate-400"/><span>{fullDate}</span></div>
-                              <span className="text-slate-300">|</span>
-                              <span className="bg-slate-100 px-2 py-0.5 rounded text-xs">{shift.session}</span>
-                           </div>
-                        </div>
-                        <button onClick={() => onRequestSwap({ date: shift.date, role: shift.role, session: shift.rawSession, owner: name })} className="flex flex-col items-center justify-center gap-1 bg-white hover:bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl transition-all active:scale-95 border-2 border-emerald-100 flex-shrink-0 shadow-sm">
-                          <RefreshCw size={18} /><span className="text-[10px] font-bold">換班查詢</span>
-                        </button>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-20 bg-white rounded-[2rem] border-2 border-dashed border-slate-200">
-                    <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300"><Briefcase size={40} /></div>
-                    <p className="text-slate-400 font-bold text-lg">查無資料</p>
-                    <p className="text-slate-300 text-sm mt-1">請確認姓名輸入正確，或等待資料同步完成。</p>
-                  </div>
-                )}
-              </main>
-            </div>
-          );
-        }
-
-        // 3. Swap Search View
-        function SwapSearchView({ name, scheduleData, peopleData, statsData, onBack, onLogout, initialRequest }) {
-          const [selectedDate, setSelectedDate] = useState(initialRequest?.date || '');
-          const [selectedRole, setSelectedRole] = useState(initialRequest?.role || '');
-          const [selectedSession, setSelectedSession] = useState(initialRequest?.session || '');
-          const [targetOwner, setTargetOwner] = useState(initialRequest?.owner || name);
-          const [candidates, setCandidates] = useState(null);
-
-          useEffect(() => {
-            if (initialRequest) {
-              setSelectedDate(initialRequest.date);
-              setSelectedRole(initialRequest.role);
-              setSelectedSession(initialRequest.session);
-              setTargetOwner(initialRequest.owner || name);
-              performSearch(initialRequest.date, initialRequest.role, initialRequest.session, initialRequest.owner || name);
-            }
-          }, [initialRequest, scheduleData, peopleData, statsData]);
-
-          const performSearch = (sDate, sRole, sSession, sOwner) => {
-            if (!sDate || !sRole) return;
-            const targetDateNorm = normalizeDateStr(sDate);
-            const targetDatePadded = formatDatePadded(sDate); 
-            const schedulesOnDate = scheduleData.filter(s => normalizeDateStr(s['日期']) === targetDateNorm);
-            const requester = peopleData.find(p => p.name === sOwner);
-            const requesterUnavailableDates = requester && requester.unavailable ? String(requester.unavailable).split(/,|、|，|\s+/).map(d => d.trim()) : [];
-            const requesterBusyDates = new Set();
-            scheduleData.forEach(row => {
-               Object.keys(row).forEach(key => {
-                 if (['堂別', '日期'].includes(key)) return;
-                 if (String(row[key]).includes(sOwner)) requesterBusyDates.add(normalizeDateStr(row['日期']));
-               });
-            });
-
-            let potentialCandidates = [];
-            peopleData.forEach(person => {
-              if (person.name === sOwner) return;
-              if (person.willingness && (person.willingness.includes('短暫休息') || person.willingness.includes('暫停服事'))) return;
-              if (!person.roles[sRole] || person.roles[sRole] !== 'O') return;
-              if (sRole !== '執事輪值') {
-                 if (person.session !== '皆可' && person.session !== sSession) return;
-              }
-              if (person.unavailable) {
-                const unavailableDates = String(person.unavailable).split(/,|、|，|\s+/).map(d => d.trim());
-                if (unavailableDates.some(d => d.includes(sDate) || d.includes(targetDatePadded) || d.includes(targetDateNorm))) return;
-              }
-              let isBusy = false;
-              schedulesOnDate.forEach(schedule => {
-                Object.keys(schedule).forEach(key => {
-                  if (['堂別', '日期'].includes(key)) return;
-                  if (String(schedule[key]).includes(person.name)) isBusy = true;
-                });
-              });
-              if (isBusy) return;
-
-              const swapBackOptionsRaw = [];
-              scheduleData.forEach(row => {
-                 const rowDateNorm = normalizeDateStr(row['日期']);
-                 const rowDatePadded = formatDatePadded(row['日期']);
-                 if (rowDateNorm === targetDateNorm) return;
-                 let candidateRoleOnDate = null;
-                 let candidateSessionOnDate = null;
-                 Object.keys(row).forEach(key => {
-                    if (['堂別', '日期'].includes(key)) return;
-                    if (String(row[key]).includes(person.name)) {
-                       candidateRoleOnDate = key;
-                       candidateSessionOnDate = row['堂別'];
-                    }
-                 });
-                 if (candidateRoleOnDate) {
-                    if (requesterBusyDates.has(rowDateNorm)) return;
-                    if (requesterUnavailableDates.some(d => d.includes(rowDateNorm) || d.includes(rowDatePadded))) return;
-                    if (requester && requester.roles[candidateRoleOnDate] === 'O') {
-                       if (candidateRoleOnDate !== '執事輪值') {
-                          if (requester.session !== '皆可' && requester.session !== candidateSessionOnDate) return;
-                       }
-                       swapBackOptionsRaw.push({
-                         date: rowDateNorm,
-                         role: candidateRoleOnDate,
-                         session: candidateSessionOnDate,
-                         ts: parseDateObj(row['日期']).getTime()
-                       });
-                    }
-                 }
-              });
-
-              const swapBackOptions = [];
-              const deaconDateMap = new Map();
-              swapBackOptionsRaw.forEach(opt => {
-                if (opt.role === '執事輪值') {
-                  if (deaconDateMap.has(opt.date)) {
-                    const idx = deaconDateMap.get(opt.date);
-                    if (!swapBackOptions[idx].session.includes(opt.session)) {
-                       swapBackOptions[idx].session += `, ${opt.session}`;
-                    }
-                  } else {
-                    deaconDateMap.set(opt.date, swapBackOptions.length);
-                    swapBackOptions.push(opt);
-                  }
-                } else {
-                  swapBackOptions.push(opt);
-                }
-              });
-              swapBackOptions.sort((a, b) => a.ts - b.ts);
-              potentialCandidates.push({
-                name: person.name,
-                session: person.session,
-                stats: statsData[person.name] || 0,
-                swapDates: swapBackOptions,
-                groupId: person.groupId,
-                session2: person.session2
-              });
-            });
-
-            potentialCandidates.sort((a, b) => a.stats - b.stats);
-            const uniqueCandidates = Array.from(new Map(potentialCandidates.map(item => [item.name, item])).values());
-            setCandidates(uniqueCandidates);
-          };
 
           return (
             <div className="min-h-screen bg-slate-50 flex flex-col">
