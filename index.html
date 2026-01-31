@@ -122,6 +122,19 @@
             const unavailable = unavailableKey ? row[unavailableKey] : '';
             const willingnessKey = Object.keys(row).find(k => k.includes('服事意願') || k.includes('willingness'));
             const willingness = willingnessKey ? String(row[willingnessKey]) : '';
+            
+            // ★★★ 解析額外標籤 (Col B & Col F) ★★★
+            // Object.values 會依照插入順序回傳 (Header順序即為Column順序)
+            // Index 1 = B欄, Index 5 = F欄
+            const rowValues = Object.values(row);
+            const rawColB = rowValues[1] ? String(rowValues[1]).trim().toUpperCase() : '';
+            const rawColF = rowValues[5] ? String(rowValues[5]).trim() : '';
+
+            const tags = {
+                isH: rawColB === 'FA' || rawColB === 'FB', // 判斷是否顯示 H
+                isF: rawColF === '1' || rawColF === '2'    // 判斷是否顯示 F
+            };
+
             const roles = {};
             Object.keys(ROLE_CONFIG).forEach(roleName => {
               const csvKey = Object.keys(row).find(k => k.trim() === roleName);
@@ -132,7 +145,7 @@
                 }
               }
             });
-            return { name, session, unavailable, willingness, roles };
+            return { name, session, unavailable, willingness, roles, tags };
           }).filter(p => p.name);
         };
 
@@ -175,8 +188,8 @@
               try {
                 const [resSchedule, resData, resStats] = await Promise.all([
                   fetch(`${API_URL}?type=schedule_view`).then(r => r.json()), 
-                  fetch(`${API_URL}?type=data_view`).then(r => r.json()),     
-                  fetch(`${API_URL}?type=stats_view`).then(r => r.json())     
+                  fetch(`${API_URL}?type=data_view`).then(r => r.json()),      
+                  fetch(`${API_URL}?type=stats_view`).then(r => r.json())      
                 ]);
                 let sCount = 0, pCount = 0;
                 if (resSchedule.status === 'success' && resSchedule.data) {
@@ -240,21 +253,21 @@
                 return <LoginView name={name} setName={setName} onLogin={handleLogin} loginError={loginError} isSyncing={isSyncing} syncStatus={syncStatus} debugInfo={debugInfo} />;
               case 'mySchedule':
                 return <MyScheduleView 
-                         name={name} 
-                         scheduleData={scheduleData}
-                         onLogout={handleLogout} 
-                         onRequestSwap={(req) => { setSwapRequest(req); setCurrentView('swapSearch'); }} 
-                       />;
+                          name={name} 
+                          scheduleData={scheduleData}
+                          onLogout={handleLogout} 
+                          onRequestSwap={(req) => { setSwapRequest(req); setCurrentView('swapSearch'); }} 
+                        />;
               case 'swapSearch':
                 return <SwapSearchView 
-                         name={name} 
-                         scheduleData={scheduleData}
-                         peopleData={peopleData}
-                         statsData={statsData}
-                         onBack={() => setCurrentView('mySchedule')} 
-                         onLogout={handleLogout}
-                         initialRequest={swapRequest} 
-                       />;
+                          name={name} 
+                          scheduleData={scheduleData}
+                          peopleData={peopleData}
+                          statsData={statsData}
+                          onBack={() => setCurrentView('mySchedule')} 
+                          onLogout={handleLogout}
+                          initialRequest={swapRequest} 
+                        />;
               default:
                 return <LoginView name={name} setName={setName} onLogin={handleLogin} loginError={loginError} />;
             }
@@ -298,32 +311,31 @@
                   </button>
                 </form>
                 <div className="mt-8 pt-6 border-t border-slate-100">
-                   <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-400 mb-2">
-                     <Activity size={14} /> 系統狀態
-                   </div>
-                   <div className={`p-3 rounded-xl text-center text-xs font-bold ${syncStatus.includes('失敗') || syncStatus.includes('錯誤') ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
-                     {isSyncing ? (
-                       <span className="flex items-center justify-center gap-2"><RefreshCw size={12} className="animate-spin" /> 載入資料中...</span>
-                     ) : syncStatus}
-                   </div>
-                   {!isSyncing && (debugInfo.scheduleCount === 0 || debugInfo.apiError) && (
-                     <div className="mt-2 p-2 bg-slate-50 rounded-lg text-[10px] text-slate-500 text-left">
-                        <p className="font-bold mb-1 text-red-400">除錯資訊：</p>
-                        <p>Schedule: {debugInfo.scheduleCount} 筆</p>
-                        <p>Data: {debugInfo.peopleCount} 筆</p>
-                        {debugInfo.apiError && <p>API Error: {debugInfo.apiError}</p>}
-                     </div>
-                   )}
+                    <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-400 mb-2">
+                      <Activity size={14} /> 系統狀態
+                    </div>
+                    <div className={`p-3 rounded-xl text-center text-xs font-bold ${syncStatus.includes('失敗') || syncStatus.includes('錯誤') ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                      {isSyncing ? (
+                        <span className="flex items-center justify-center gap-2"><RefreshCw size={12} className="animate-spin" /> 載入資料中...</span>
+                      ) : syncStatus}
+                    </div>
+                    {!isSyncing && (debugInfo.scheduleCount === 0 || debugInfo.apiError) && (
+                      <div className="mt-2 p-2 bg-slate-50 rounded-lg text-[10px] text-slate-500 text-left">
+                         <p className="font-bold mb-1 text-red-400">除錯資訊：</p>
+                         <p>Schedule: {debugInfo.scheduleCount} 筆</p>
+                         <p>Data: {debugInfo.peopleCount} 筆</p>
+                         {debugInfo.apiError && <p>API Error: {debugInfo.apiError}</p>}
+                      </div>
+                    )}
                 </div>
               </div>
             </div>
           );
         }
 
-        // 2. My Schedule View (已修改：支援 新朋友關懷 自動編號)
+        // 2. My Schedule View
         function MyScheduleView({ name, scheduleData, onLogout, onRequestSwap }) {
           const [flatShifts, setFlatShifts] = useState([]);
-          // ★★★ 在此處加入 '新朋友關懷' ★★★
           const numberedRoles = ['接待', '收奉獻', '主餐', '新朋友關懷']; 
 
           useEffect(() => {
@@ -411,7 +423,6 @@
                     return (
                       <div key={index} className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-200 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500" style={{animationDelay: `${index * 50}ms`}}>
                         <div className="flex flex-col gap-1 flex-grow">
-                           {/* 崗位名稱 + 圓圈數字美化 */}
                            <span className={`text-xl font-black tracking-tight leading-tight ${textColorClass} flex items-center gap-2`}>
                              {shift.role}
                              {shift.shiftNumber && (
@@ -552,7 +563,8 @@
                 name: person.name,
                 session: person.session,
                 stats: statsData[person.name] || 0,
-                swapDates: swapBackOptions
+                swapDates: swapBackOptions,
+                tags: person.tags // ★★★ 將 tags 傳遞給前端顯示 ★★★
               });
             });
 
@@ -576,11 +588,11 @@
                    <div className="flex items-center gap-4">
                       <div className="bg-indigo-50 p-4 rounded-2xl text-indigo-600"><Calendar size={28} /></div>
                       <div>
-                         <p className="text-2xl font-black text-slate-800">{normalizeDateStr(selectedDate)}</p>
-                         <div className="flex items-center gap-2 mt-1">
-                            <span className="text-sm font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">{selectedRole}</span>
-                            {selectedRole !== '執事輪值' && <span className="text-sm font-bold text-slate-400">• {selectedSession}</span>}
-                         </div>
+                          <p className="text-2xl font-black text-slate-800">{normalizeDateStr(selectedDate)}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                             <span className="text-sm font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">{selectedRole}</span>
+                             {selectedRole !== '執事輪值' && <span className="text-sm font-bold text-slate-400">• {selectedSession}</span>}
+                          </div>
                       </div>
                    </div>
                 </div>
@@ -611,6 +623,19 @@
                                     <span className="bg-slate-100 px-1.5 py-0.5 rounded">{person.session}</span>
                                     <span>•</span>
                                     <span>本季服事 {person.stats} 次</span>
+                                    
+                                    {/* ★★★ 修改：使用 CSS Badge 取代 Unicode 符號以確保顯示 ★★★ */}
+                                    {person.tags?.isH && (
+                                      <span title="FA/FB" className="ml-1 inline-flex items-center justify-center bg-slate-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded leading-none">
+                                        H
+                                      </span>
+                                    )}
+                                    {person.tags?.isF && (
+                                      <span title="類別1/2" className="ml-1 inline-flex items-center justify-center bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded leading-none">
+                                        F
+                                      </span>
+                                    )}
+
                                   </div>
                                 </div>
                               </div>
