@@ -116,12 +116,24 @@
           return rawRows.map(row => {
             const nameKey = Object.keys(row).find(k => k.includes('姓名') || k.toLowerCase() === 'name');
             const name = nameKey ? row[nameKey] : '';
+            
             const sessionKey = Object.keys(row).find(k => k.includes('服事時段') || k.includes('session'));
             const session = sessionKey ? row[sessionKey] : '皆可';
+
             const unavailableKey = Object.keys(row).find(k => k.includes('不能參與') || k.includes('unavailable'));
             const unavailable = unavailableKey ? row[unavailableKey] : '';
+
             const willingnessKey = Object.keys(row).find(k => k.includes('服事意願') || k.includes('willingness'));
             const willingness = willingnessKey ? String(row[willingnessKey]) : '';
+
+            // ★★★ 新增：讀取 GroupID (B欄) 和 ServiceTwo (F欄) ★★★
+            // 這裡使用模糊搜尋 key，確保即使標題有些微差異也能抓到
+            const groupKey = Object.keys(row).find(k => k.includes('群組') || k.includes('Group') || k.includes('ID'));
+            const groupId = groupKey ? String(row[groupKey]).trim().toUpperCase() : '';
+
+            const serviceTwoKey = Object.keys(row).find(k => k.includes('二堂') || k.includes('2nd') || k.includes('第二'));
+            const serviceTwo = serviceTwoKey ? String(row[serviceTwoKey]).trim() : '';
+
             const roles = {};
             Object.keys(ROLE_CONFIG).forEach(roleName => {
               const csvKey = Object.keys(row).find(k => k.trim() === roleName);
@@ -132,7 +144,8 @@
                 }
               }
             });
-            return { name, session, unavailable, willingness, roles };
+
+            return { name, session, unavailable, willingness, roles, groupId, serviceTwo };
           }).filter(p => p.name);
         };
 
@@ -320,10 +333,9 @@
           );
         }
 
-        // 2. My Schedule View (已修改：支援 新朋友關懷 自動編號)
+        // 2. My Schedule View
         function MyScheduleView({ name, scheduleData, onLogout, onRequestSwap }) {
           const [flatShifts, setFlatShifts] = useState([]);
-          // ★★★ 在此處加入 '新朋友關懷' ★★★
           const numberedRoles = ['接待', '收奉獻', '主餐', '新朋友關懷']; 
 
           useEffect(() => {
@@ -340,7 +352,6 @@
                 const cellValue = String(val || '');
                 
                 if (cellValue.includes(searchName)) {
-                   // 計算編號邏輯
                    let shiftNumber = null;
                    if (numberedRoles.includes(key)) {
                        const names = cellValue.split(/,|、|，|\s+/).map(n => n.trim()).filter(n => n);
@@ -399,7 +410,7 @@
               <main className="flex-grow p-6 space-y-4 max-w-2xl mx-auto w-full">
                 <div className="flex items-center gap-2 mb-2">
                   <Calendar className="text-indigo-500" size={20} />
-                  <h3 className="text-lg sm:text-xl font-bold text-slate-800">本季崇拜服事明細</h3>
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-800">本季崇拜服事安排</h3>
                 </div>
                 {flatShifts.length > 0 ? (
                   flatShifts.map((shift, index) => {
@@ -411,7 +422,6 @@
                     return (
                       <div key={index} className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-200 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500" style={{animationDelay: `${index * 50}ms`}}>
                         <div className="flex flex-col gap-1 flex-grow">
-                           {/* 崗位名稱 + 圓圈數字美化 */}
                            <span className={`text-xl font-black tracking-tight leading-tight ${textColorClass} flex items-center gap-2`}>
                              {shift.role}
                              {shift.shiftNumber && (
@@ -420,7 +430,6 @@
                                </span>
                              )}
                            </span>
-                           
                            <div className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-500">
                               <div className="flex items-center gap-1.5"><Calendar size={14} className="text-slate-400"/><span>{fullDate}</span></div>
                               <span className="text-slate-300">|</span>
@@ -445,7 +454,7 @@
           );
         }
 
-        // 3. Swap Search View
+        // 3. Swap Search View (已升級：H & F 標記)
         function SwapSearchView({ name, scheduleData, peopleData, statsData, onBack, onLogout, initialRequest }) {
           const [selectedDate, setSelectedDate] = useState(initialRequest?.date || '');
           const [selectedRole, setSelectedRole] = useState(initialRequest?.role || '');
@@ -552,6 +561,8 @@
                 name: person.name,
                 session: person.session,
                 stats: statsData[person.name] || 0,
+                groupId: person.groupId,     // 傳遞 groupId
+                serviceTwo: person.serviceTwo, // 傳遞 serviceTwo
                 swapDates: swapBackOptions
               });
             });
@@ -611,6 +622,16 @@
                                     <span className="bg-slate-100 px-1.5 py-0.5 rounded">{person.session}</span>
                                     <span>•</span>
                                     <span>本季服事 {person.stats} 次</span>
+                                    
+                                    {/* ★★★ H 標記 (FA 或 FB) ★★★ */}
+                                    {['FA', 'FB'].includes(person.groupId) && (
+                                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold" title={`Group: ${person.groupId}`}>H</span>
+                                    )}
+
+                                    {/* ★★★ F 標記 (1 或 2) ★★★ */}
+                                    {['1', '2'].includes(person.serviceTwo) && (
+                                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold" title={`2nd Service: ${person.serviceTwo}`}>F</span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -628,7 +649,7 @@
                                 </div>
                               </div>
                             ) : (
-                              <div className="mt-4 pt-3 border-t border-slate-50 text-xs text-slate-400"><span className="font-bold">雙方沒有適合的換班日期，也許能協助補位支援。</span></div>
+                              <div className="mt-4 pt-3 border-t border-slate-50 text-xs text-slate-400"><span className="font-bold">沒有適合的換班日期，但他可能可以幫你頂一下。</span></div>
                             )}
                           </div>
                         );
@@ -636,8 +657,8 @@
                     ) : (
                       <div className="p-10 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">
                         <UserX className="mx-auto mb-4 opacity-30" size={48} />
-                        <p className="font-bold text-lg text-slate-500">找不到適合人選</p>
-                        <p className="text-sm mt-1 opacity-70">卡住了嗎？聯絡排班人員協助處理</p>
+                        <p className="font-bold text-lg text-slate-500">找不到人選</p>
+                        <p className="text-sm mt-1 opacity-70">當天大家可能都已排班，或無人具備此崗位技能。</p>
                       </div>
                     )}
                   </div>
