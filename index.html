@@ -6,7 +6,6 @@
     <title>TBC 崇拜服事查詢系統</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="importmap">
@@ -31,7 +30,6 @@
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useMemo } from 'react';
         import { createRoot } from 'react-dom/client';
-        
         import { 
           Calendar, Clock, User, LogOut, Heart, Monitor, Users, Smile, BookOpen, 
           Coffee, CheckCircle, Info, RefreshCw, Wifi, Database, AlertCircle, 
@@ -112,8 +110,12 @@
         };
 
         const processPeopleData = (rawRows) => {
-          if (!Array.isArray(rawRows)) return [];
-          return rawRows.map(row => {
+          if (!Array.isArray(rawRows) || rawRows.length === 0) return [];
+
+          // ★★★ DEBUG: 印出系統抓到的欄位名稱，請按 F12 查看 ★★★
+          console.log("【除錯】試算表所有欄位:", Object.keys(rawRows[0]));
+
+          return rawRows.map((row, index) => {
             const nameKey = Object.keys(row).find(k => k.includes('姓名') || k.toLowerCase() === 'name');
             const name = nameKey ? row[nameKey] : '';
             
@@ -126,16 +128,23 @@
             const willingnessKey = Object.keys(row).find(k => k.includes('服事意願') || k.includes('willingness'));
             const willingness = willingnessKey ? String(row[willingnessKey]) : '';
 
-            // ★★★ 新增：抓取 群組ID (類似B欄) 與 二堂 (類似F欄) ★★★
-            // 為了避免欄位名稱變更，這裡使用關鍵字模糊搜尋
-            
-            // 找 "ID" 或 "群組"
-            const groupIdKey = Object.keys(row).find(k => k.toUpperCase().includes('ID') || k.includes('群組ID'));
+            // ★★★ 修正欄位判斷邏輯 ★★★
+            // 優先找包含「群組」的欄位，其次才找包含「ID」的
+            // 避免抓到「編號(ID)」這種欄位
+            const groupIdKey = Object.keys(row).find(k => k.includes('群組') || k.includes('Group')) 
+                               || Object.keys(row).find(k => k.toUpperCase().includes('ID'));
             const groupId = groupIdKey ? String(row[groupIdKey]).toUpperCase().trim() : '';
 
-            // 找 "二堂"
-            const session2Key = Object.keys(row).find(k => k.includes('主日服事二堂'));
+            // 優先找包含「二堂」或「2堂」的
+            const session2Key = Object.keys(row).find(k => k.includes('二堂') || k.includes('2堂') || k.includes('主日'));
             const session2 = session2Key ? String(row[session2Key]).trim() : '';
+
+            // ★★★ DEBUG: 印出第一個人的資料，確認有沒有抓對 ★★★
+            if (index === 0) {
+                console.log("【除錯】第一位人員:", name);
+                console.log(` - 抓到群組欄位: [${groupIdKey}], 值: ${groupId}`);
+                console.log(` - 抓到二堂欄位: [${session2Key}], 值: ${session2}`);
+            }
 
             const roles = {};
             Object.keys(ROLE_CONFIG).forEach(roleName => {
@@ -458,7 +467,7 @@
           );
         }
 
-        // 3. Swap Search View (已修改：新增 🅗 與 🅕 標記)
+        // 3. Swap Search View
         function SwapSearchView({ name, scheduleData, peopleData, statsData, onBack, onLogout, initialRequest }) {
           const [selectedDate, setSelectedDate] = useState(initialRequest?.date || '');
           const [selectedRole, setSelectedRole] = useState(initialRequest?.role || '');
@@ -566,8 +575,8 @@
                 session: person.session,
                 stats: statsData[person.name] || 0,
                 swapDates: swapBackOptions,
-                groupId: person.groupId,   // 傳遞標記資料
-                session2: person.session2  // 傳遞標記資料
+                groupId: person.groupId,
+                session2: person.session2
               });
             });
 
@@ -622,20 +631,19 @@
                                       <span className="flex items-center gap-1 text-[10px] font-bold bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full border border-orange-100"><HandHeart size={10} /> 替補</span>
                                     )}
                                   </div>
-                                  {/* ★★★ 修改處：加上 H 與 F 徽章 ★★★ */}
                                   <div className="flex items-center gap-1 text-xs font-bold text-slate-400 mt-1">
                                     <span className="bg-slate-100 px-1.5 py-0.5 rounded">{person.session}</span>
                                     <span>•</span>
                                     <span>本季 {person.stats} 次</span>
                                     
-                                    {/* 顯示 H 標記 (FA/FB) */}
+                                    {/* H 標記 (FA/FB) */}
                                     {(person.groupId === 'FA' || person.groupId === 'FB') && (
-                                        <span className="ml-1 w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-black" title="群組ID: FA/FB">H</span>
+                                        <span className="ml-1 w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-black" title="群組: FA/FB">H</span>
                                     )}
 
-                                    {/* 顯示 F 標記 (1/2) */}
+                                    {/* F 標記 (1/2) */}
                                     {(person.session2 === '1' || person.session2 === '2') && (
-                                        <span className="ml-1 w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-black" title="主日服事二堂">F</span>
+                                        <span className="ml-1 w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-black" title="二堂服事">F</span>
                                     )}
                                   </div>
                                 </div>
