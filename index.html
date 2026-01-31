@@ -65,7 +65,10 @@
 
         const sheetToObjects = (rows) => {
           if (!rows || rows.length < 2) return [];
-          const headers = rows[0];
+          // ★★★ 修正：確保 Header 不為空，這樣欄位順序才不會跑掉 ★★★
+          // 如果 Header 是空白，我們補上 _COL_索引_，確保資料能被讀取
+          const headers = rows[0].map((h, i) => (h && String(h).trim() !== '') ? String(h).trim() : `_COL_${i}_`);
+          
           const data = rows.slice(1);
           return data.map(row => {
             const obj = {};
@@ -123,16 +126,26 @@
             const willingnessKey = Object.keys(row).find(k => k.includes('服事意願') || k.includes('willingness'));
             const willingness = willingnessKey ? String(row[willingnessKey]) : '';
             
-            // ★★★ 解析額外標籤 (Col B & Col F) ★★★
-            // Object.values 會依照插入順序回傳 (Header順序即為Column順序)
-            // Index 1 = B欄, Index 5 = F欄
+            // ★★★ 解析額外標籤 (強化版) ★★★
+            // Object.values 依照 Header 順序回傳
+            // 現在因為 sheetToObjects 修正了，Index 1 肯定是 B 欄，Index 5 肯定是 F 欄
             const rowValues = Object.values(row);
-            const rawColB = rowValues[1] ? String(rowValues[1]).trim().toUpperCase() : '';
-            const rawColF = rowValues[5] ? String(rowValues[5]).trim() : '';
+            
+            // 讀取指定欄位
+            const valB = rowValues[1] ? String(rowValues[1]).trim().toUpperCase() : '';
+            const valF = rowValues[5] ? String(rowValues[5]).trim() : '';
+            
+            // 輔助偵測：掃描全欄位是否包含 FA/FB (防呆機制)
+            const hasFAFB_Anywhere = rowValues.some(v => {
+                const s = String(v).trim().toUpperCase();
+                return s === 'FA' || s === 'FB';
+            });
 
             const tags = {
-                isH: rawColB === 'FA' || rawColB === 'FB', // 判斷是否顯示 H
-                isF: rawColF === '1' || rawColF === '2'    // 判斷是否顯示 F
+                // 優先看 B 欄，如果沒有，再看是否有任何欄位是 FA/FB
+                isH: (valB === 'FA' || valB === 'FB') || hasFAFB_Anywhere,
+                // F 欄必須嚴格是 1 或 2
+                isF: valF === '1' || valF === '2'
             };
 
             const roles = {};
