@@ -126,16 +126,16 @@
             const willingnessKey = Object.keys(row).find(k => k.includes('服事意願') || k.includes('willingness'));
             const willingness = willingnessKey ? String(row[willingnessKey]) : '';
 
-            // ★★★ 新增：讀取 H (群組) 與 F (主日服事二堂) 標記 ★★★
-            // 嘗試讀取 '群組ID' 或 'Group ID' (B欄)
-            const groupKey = Object.keys(row).find(k => k.includes('群組') || k.includes('ID'));
-            const groupVal = groupKey ? String(row[groupKey]).trim().toUpperCase() : '';
-            const isH = (groupVal === 'FA' || groupVal === 'FB');
+            // ★★★ 新增：抓取 群組ID (類似B欄) 與 二堂 (類似F欄) ★★★
+            // 為了避免欄位名稱變更，這裡使用關鍵字模糊搜尋
+            
+            // 找 "ID" 或 "群組"
+            const groupIdKey = Object.keys(row).find(k => k.toUpperCase().includes('ID') || k.includes('群組'));
+            const groupId = groupIdKey ? String(row[groupIdKey]).toUpperCase().trim() : '';
 
-            // 嘗試讀取 '主日服事二堂' (F欄)
-            const serviceKey = Object.keys(row).find(k => k.includes('主日服事二堂') || k.includes('二堂'));
-            const serviceVal = serviceKey ? String(row[serviceKey]).trim() : '';
-            const isF = (serviceVal === '1' || serviceVal === '2');
+            // 找 "二堂"
+            const session2Key = Object.keys(row).find(k => k.includes('二堂'));
+            const session2 = session2Key ? String(row[session2Key]).trim() : '';
 
             const roles = {};
             Object.keys(ROLE_CONFIG).forEach(roleName => {
@@ -148,14 +148,7 @@
               }
             });
 
-            return { 
-                name, 
-                session, 
-                unavailable, 
-                willingness, 
-                roles,
-                tags: { isH, isF } // 將標記存入物件
-            };
+            return { name, session, unavailable, willingness, roles, groupId, session2 };
           }).filter(p => p.name);
         };
 
@@ -465,7 +458,7 @@
           );
         }
 
-        // 3. Swap Search View (已修改：支援 H 與 F 標記)
+        // 3. Swap Search View (已修改：新增 🅗 與 🅕 標記)
         function SwapSearchView({ name, scheduleData, peopleData, statsData, onBack, onLogout, initialRequest }) {
           const [selectedDate, setSelectedDate] = useState(initialRequest?.date || '');
           const [selectedRole, setSelectedRole] = useState(initialRequest?.role || '');
@@ -573,7 +566,8 @@
                 session: person.session,
                 stats: statsData[person.name] || 0,
                 swapDates: swapBackOptions,
-                tags: person.tags // 傳遞標記資料
+                groupId: person.groupId,   // 傳遞標記資料
+                session2: person.session2  // 傳遞標記資料
               });
             });
 
@@ -628,20 +622,22 @@
                                       <span className="flex items-center gap-1 text-[10px] font-bold bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full border border-orange-100"><HandHeart size={10} /> 替補</span>
                                     )}
                                   </div>
-                                  
-                                  {/* ★★★ 標記顯示區域 H & F ★★★ */}
+                                  {/* ★★★ 修改處：加上 H 與 F 徽章 ★★★ */}
                                   <div className="flex items-center gap-1 text-xs font-bold text-slate-400 mt-1">
-                                    <span>{person.session}</span>
+                                    <span className="bg-slate-100 px-1.5 py-0.5 rounded">{person.session}</span>
                                     <span>•</span>
                                     <span>本季 {person.stats} 次</span>
-                                    {person.tags?.isH && (
-                                        <span className="bg-slate-400 text-white w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ml-1">H</span>
+                                    
+                                    {/* 顯示 H 標記 (FA/FB) */}
+                                    {(person.groupId === 'FA' || person.groupId === 'FB') && (
+                                        <span className="ml-1 w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-black" title="群組: FA/FB">H</span>
                                     )}
-                                    {person.tags?.isF && (
-                                        <span className="bg-slate-400 text-white w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold">F</span>
+
+                                    {/* 顯示 F 標記 (1/2) */}
+                                    {(person.session2 === '1' || person.session2 === '2') && (
+                                        <span className="ml-1 w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-black" title="二堂服事">F</span>
                                     )}
                                   </div>
-
                                 </div>
                               </div>
                             </div>
