@@ -6,6 +6,7 @@
     <title>TBC 崇拜服事查詢系統</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="importmap">
@@ -25,7 +26,26 @@
     </style>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root" class="p-10 text-center text-slate-500">
+        <h1 class="text-2xl font-bold mb-2">系統啟動中...</h1>
+        <p>如果畫面停留在此超過 5 秒，代表程式發生錯誤。</p>
+    </div>
+
+    <script>
+        window.onerror = function(msg, url, line, col, error) {
+            const root = document.getElementById('root');
+            root.innerHTML = `
+                <div style="color:red; background:#fee; padding:20px; border-radius:10px; text-align:left;">
+                    <h3 style="font-weight:bold; font-size:1.2em;">❌ 發生錯誤 (Error)</h3>
+                    <p><strong>訊息：</strong> ${msg}</p>
+                    <p><strong>位置：</strong> Line ${line} : Col ${col}</p>
+                    <pre style="background:#fff; padding:10px; margin-top:10px; overflow:auto;">${error ? error.stack : 'No stack trace'}</pre>
+                    <button onclick="location.reload()" style="margin-top:15px; padding:10px 20px; background:#666; color:white; border:none; border-radius:5px;">重新整理</button>
+                </div>
+            `;
+            return false;
+        };
+    </script>
 
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useMemo } from 'react';
@@ -38,7 +58,7 @@
         } from 'lucide-react';
 
         // ==========================================
-        // ★ 系統設定
+        // ★ 設定區
         // ==========================================
         const API_URL = "https://script.google.com/macros/s/AKfycbwooXPX-T7GnXQl-gXbOHmHZjSOD5Po5KK0LmoavdT0i260qerMbl2necQG4vo57fXh7g/exec";
 
@@ -113,7 +133,7 @@
           if (!Array.isArray(rawRows) || rawRows.length === 0) return [];
 
           return rawRows.map((row, index) => {
-            // 基礎資料
+            // 基本欄位
             const nameKey = Object.keys(row).find(k => k.includes('姓名') || k.toLowerCase() === 'name');
             const name = nameKey ? row[nameKey] : '';
             
@@ -126,26 +146,21 @@
             const willingnessKey = Object.keys(row).find(k => k.includes('服事意願') || k.includes('willingness'));
             const willingness = willingnessKey ? String(row[willingnessKey]) : '';
 
-            // ★★★ 關鍵修正：抓取 B 欄 (Index 1) 和 F 欄 (Index 5) ★★★
-            const keys = Object.keys(row);
+            // ★★★ 強制讀取指定位置 (Index 1 = B欄, Index 5 = F欄) ★★★
+            // Object.values(row) 會回傳該列的所有值陣列 [A欄值, B欄值, C欄值...]
+            const rowValues = Object.values(row);
             
-            // 嘗試 1: 找標題關鍵字
-            let groupIdKey = keys.find(k => k.includes('ID') || k.includes('群組'));
-            let session2Key = keys.find(k => k.includes('二堂') || k.includes('2堂') || k.includes('主日'));
+            // 防呆：確保該列有足夠長度，否則回傳空字串
+            const rawGroup = rowValues.length > 1 ? rowValues[1] : ''; // B欄
+            const rawSession2 = rowValues.length > 5 ? rowValues[5] : ''; // F欄
 
-            // 嘗試 2: 如果沒找到，強制用位置 (B欄=第2個key, F欄=第6個key)
-            // 注意：Object.keys 的順序通常對應 Excel 欄位順序
-            let rawGroup = groupIdKey ? row[groupIdKey] : (keys.length > 1 ? row[keys[1]] : '');
-            let rawSession2 = session2Key ? row[session2Key] : (keys.length > 5 ? row[keys[5]] : '');
+            const groupId = String(rawGroup || '').toUpperCase().trim();
+            const session2 = String(rawSession2 || '').trim();
 
-            const groupId = String(rawGroup || '').toUpperCase().trim(); // 轉大寫 (FA/FB)
-            const session2 = String(rawSession2 || '').trim(); // 轉字串 (1/2)
-
-            // DEBUG: 印出第一個人的資料確認
             if (index === 0) {
-                console.log(`[除錯] 第一人: ${name}`);
-                console.log(` - B欄(群組): 原始=${rawGroup}, 處理後=${groupId}`);
-                console.log(` - F欄(二堂): 原始=${rawSession2}, 處理後=${session2}`);
+               console.log("【資料檢查】第一位人員:", name);
+               console.log(" - B欄(群組):", groupId);
+               console.log(" - F欄(二堂):", session2);
             }
 
             const roles = {};
@@ -416,7 +431,7 @@
                 </div>
                 <button onClick={onLogout} className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-xl text-slate-500 font-bold hover:text-red-500 hover:bg-red-50 transition-colors"><LogOut size={18}/><span>登出</span></button>
               </nav>
-              <main className="flex-grow p-6 space-y-6 max-w-2xl mx-auto w-full">
+              <main className="flex-grow p-6 space-y-4 max-w-2xl mx-auto w-full">
                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">幫今天的服事找合適人選：</h3>
                    <div className="flex items-center gap-4">
