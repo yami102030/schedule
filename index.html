@@ -130,11 +130,11 @@
             // 為了避免欄位名稱變更，這裡使用關鍵字模糊搜尋
             
             // 找 "ID" 或 "群組"
-            const groupIdKey = Object.keys(row).find(k => k.toUpperCase().includes('ID') || k.includes('群組'));
+            const groupIdKey = Object.keys(row).find(k => k.toUpperCase().includes('ID') || k.includes('群組ID'));
             const groupId = groupIdKey ? String(row[groupIdKey]).toUpperCase().trim() : '';
 
             // 找 "二堂"
-            const session2Key = Object.keys(row).find(k => k.includes('二堂'));
+            const session2Key = Object.keys(row).find(k => k.includes('主日服事二堂'));
             const session2 = session2Key ? String(row[session2Key]).trim() : '';
 
             const roles = {};
