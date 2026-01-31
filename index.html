@@ -5,10 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TBC 崇拜服事查詢系統</title>
     
+    <!-- 1. 樣式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
     
+    <!-- 2. Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
+    <!-- 3. Import Map -->
     <script type="importmap">
     {
         "imports": {
@@ -28,10 +31,27 @@
 <body>
     <div id="root"></div>
 
+    <!-- 4. 防白屏 -->
+    <script>
+        window.onerror = function(msg, url, line, col, error) {
+            const root = document.getElementById('root');
+            if(root) {
+                root.innerHTML = `
+                    <div style="color:red; background:#fee; padding:20px; text-align:left; margin:20px; border-radius:10px;">
+                        <h3>❌ 程式發生錯誤</h3>
+                        <p>${msg}</p>
+                        <p>Line: ${line}</p>
+                        <button onclick="location.reload()" style="padding:8px 16px; background:#333; color:white; border-radius:5px; margin-top:10px; border:none; cursor:pointer;">重新整理</button>
+                    </div>`;
+            }
+            return false;
+        };
+    </script>
+
+    <!-- 5. 主程式 -->
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useMemo } from 'react';
         import { createRoot } from 'react-dom/client';
-        
         import { 
           Calendar, Clock, User, LogOut, Heart, Monitor, Users, Smile, BookOpen, 
           Coffee, CheckCircle, Info, RefreshCw, Wifi, Database, AlertCircle, 
@@ -40,7 +60,7 @@
         } from 'lucide-react';
 
         // ==========================================
-        // ★ 系統設定區
+        // ★ 系統設定
         // ==========================================
         const API_URL = "https://script.google.com/macros/s/AKfycbwooXPX-T7GnXQl-gXbOHmHZjSOD5Po5KK0LmoavdT0i260qerMbl2necQG4vo57fXh7g/exec";
 
@@ -65,10 +85,7 @@
 
         const sheetToObjects = (rows) => {
           if (!rows || rows.length < 2) return [];
-          // ★★★ 修正：確保 Header 不為空，這樣欄位順序才不會跑掉 ★★★
-          // 如果 Header 是空白，我們補上 _COL_索引_，確保資料能被讀取
-          const headers = rows[0].map((h, i) => (h && String(h).trim() !== '') ? String(h).trim() : `_COL_${i}_`);
-          
+          const headers = rows[0];
           const data = rows.slice(1);
           return data.map(row => {
             const obj = {};
@@ -115,38 +132,32 @@
         };
 
         const processPeopleData = (rawRows) => {
-          if (!Array.isArray(rawRows)) return [];
-          return rawRows.map(row => {
+          if (!Array.isArray(rawRows) || rawRows.length === 0) return [];
+
+          return rawRows.map((row, index) => {
             const nameKey = Object.keys(row).find(k => k.includes('姓名') || k.toLowerCase() === 'name');
             const name = nameKey ? row[nameKey] : '';
+            
             const sessionKey = Object.keys(row).find(k => k.includes('服事時段') || k.includes('session'));
             const session = sessionKey ? row[sessionKey] : '皆可';
+
             const unavailableKey = Object.keys(row).find(k => k.includes('不能參與') || k.includes('unavailable'));
             const unavailable = unavailableKey ? row[unavailableKey] : '';
+
             const willingnessKey = Object.keys(row).find(k => k.includes('服事意願') || k.includes('willingness'));
             const willingness = willingnessKey ? String(row[willingnessKey]) : '';
-            
-            // ★★★ 解析額外標籤 (強化版) ★★★
-            // Object.values 依照 Header 順序回傳
-            // 現在因為 sheetToObjects 修正了，Index 1 肯定是 B 欄，Index 5 肯定是 F 欄
-            const rowValues = Object.values(row);
-            
-            // 讀取指定欄位
-            const valB = rowValues[1] ? String(rowValues[1]).trim().toUpperCase() : '';
-            const valF = rowValues[5] ? String(rowValues[5]).trim() : '';
-            
-            // 輔助偵測：掃描全欄位是否包含 FA/FB (防呆機制)
-            const hasFAFB_Anywhere = rowValues.some(v => {
-                const s = String(v).trim().toUpperCase();
-                return s === 'FA' || s === 'FB';
-            });
 
-            const tags = {
-                // 優先看 B 欄，如果沒有，再看是否有任何欄位是 FA/FB
-                isH: (valB === 'FA' || valB === 'FB') || hasFAFB_Anywhere,
-                // F 欄必須嚴格是 1 或 2
-                isF: valF === '1' || valF === '2'
-            };
+            // ★ 強制抓取 B 欄 (Index 1) 和 F 欄 (Index 5)
+            const rowValues = Object.values(row);
+            const rawGroup = rowValues.length > 1 ? rowValues[1] : '';
+            const rawSession2 = rowValues.length > 5 ? rowValues[5] : '';
+
+            const groupId = String(rawGroup || '').toUpperCase().trim();
+            const session2 = String(rawSession2 || '').trim();
+
+            if (index === 0) {
+               console.log("【資料檢查】第一位:", name, "Group:", groupId, "Session2:", session2);
+            }
 
             const roles = {};
             Object.keys(ROLE_CONFIG).forEach(roleName => {
@@ -158,7 +169,8 @@
                 }
               }
             });
-            return { name, session, unavailable, willingness, roles, tags };
+
+            return { name, session, unavailable, willingness, roles, groupId, session2 };
           }).filter(p => p.name);
         };
 
@@ -201,8 +213,8 @@
               try {
                 const [resSchedule, resData, resStats] = await Promise.all([
                   fetch(`${API_URL}?type=schedule_view`).then(r => r.json()), 
-                  fetch(`${API_URL}?type=data_view`).then(r => r.json()),      
-                  fetch(`${API_URL}?type=stats_view`).then(r => r.json())      
+                  fetch(`${API_URL}?type=data_view`).then(r => r.json()),     
+                  fetch(`${API_URL}?type=stats_view`).then(r => r.json())     
                 ]);
                 let sCount = 0, pCount = 0;
                 if (resSchedule.status === 'success' && resSchedule.data) {
@@ -266,21 +278,21 @@
                 return <LoginView name={name} setName={setName} onLogin={handleLogin} loginError={loginError} isSyncing={isSyncing} syncStatus={syncStatus} debugInfo={debugInfo} />;
               case 'mySchedule':
                 return <MyScheduleView 
-                          name={name} 
-                          scheduleData={scheduleData}
-                          onLogout={handleLogout} 
-                          onRequestSwap={(req) => { setSwapRequest(req); setCurrentView('swapSearch'); }} 
-                        />;
+                         name={name} 
+                         scheduleData={scheduleData}
+                         onLogout={handleLogout} 
+                         onRequestSwap={(req) => { setSwapRequest(req); setCurrentView('swapSearch'); }} 
+                       />;
               case 'swapSearch':
                 return <SwapSearchView 
-                          name={name} 
-                          scheduleData={scheduleData}
-                          peopleData={peopleData}
-                          statsData={statsData}
-                          onBack={() => setCurrentView('mySchedule')} 
-                          onLogout={handleLogout}
-                          initialRequest={swapRequest} 
-                        />;
+                         name={name} 
+                         scheduleData={scheduleData}
+                         peopleData={peopleData}
+                         statsData={statsData}
+                         onBack={() => setCurrentView('mySchedule')} 
+                         onLogout={handleLogout}
+                         initialRequest={swapRequest} 
+                       />;
               default:
                 return <LoginView name={name} setName={setName} onLogin={handleLogin} loginError={loginError} />;
             }
@@ -324,22 +336,22 @@
                   </button>
                 </form>
                 <div className="mt-8 pt-6 border-t border-slate-100">
-                    <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-400 mb-2">
-                      <Activity size={14} /> 系統狀態
-                    </div>
-                    <div className={`p-3 rounded-xl text-center text-xs font-bold ${syncStatus.includes('失敗') || syncStatus.includes('錯誤') ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
-                      {isSyncing ? (
-                        <span className="flex items-center justify-center gap-2"><RefreshCw size={12} className="animate-spin" /> 載入資料中...</span>
-                      ) : syncStatus}
-                    </div>
-                    {!isSyncing && (debugInfo.scheduleCount === 0 || debugInfo.apiError) && (
-                      <div className="mt-2 p-2 bg-slate-50 rounded-lg text-[10px] text-slate-500 text-left">
-                         <p className="font-bold mb-1 text-red-400">除錯資訊：</p>
-                         <p>Schedule: {debugInfo.scheduleCount} 筆</p>
-                         <p>Data: {debugInfo.peopleCount} 筆</p>
-                         {debugInfo.apiError && <p>API Error: {debugInfo.apiError}</p>}
-                      </div>
-                    )}
+                   <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-400 mb-2">
+                     <Activity size={14} /> 系統狀態
+                   </div>
+                   <div className={`p-3 rounded-xl text-center text-xs font-bold ${syncStatus.includes('失敗') || syncStatus.includes('錯誤') ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                     {isSyncing ? (
+                       <span className="flex items-center justify-center gap-2"><RefreshCw size={12} className="animate-spin" /> 載入資料中...</span>
+                     ) : syncStatus}
+                   </div>
+                   {!isSyncing && (debugInfo.scheduleCount === 0 || debugInfo.apiError) && (
+                     <div className="mt-2 p-2 bg-slate-50 rounded-lg text-[10px] text-slate-500 text-left">
+                        <p className="font-bold mb-1 text-red-400">除錯資訊：</p>
+                        <p>Schedule: {debugInfo.scheduleCount} 筆</p>
+                        <p>Data: {debugInfo.peopleCount} 筆</p>
+                        {debugInfo.apiError && <p>API Error: {debugInfo.apiError}</p>}
+                     </div>
+                   )}
                 </div>
               </div>
             </div>
@@ -365,7 +377,6 @@
                 const cellValue = String(val || '');
                 
                 if (cellValue.includes(searchName)) {
-                   // 計算編號邏輯
                    let shiftNumber = null;
                    if (numberedRoles.includes(key)) {
                        const names = cellValue.split(/,|、|，|\s+/).map(n => n.trim()).filter(n => n);
@@ -577,7 +588,8 @@
                 session: person.session,
                 stats: statsData[person.name] || 0,
                 swapDates: swapBackOptions,
-                tags: person.tags // ★★★ 將 tags 傳遞給前端顯示 ★★★
+                groupId: person.groupId,
+                session2: person.session2
               });
             });
 
@@ -601,11 +613,11 @@
                    <div className="flex items-center gap-4">
                       <div className="bg-indigo-50 p-4 rounded-2xl text-indigo-600"><Calendar size={28} /></div>
                       <div>
-                          <p className="text-2xl font-black text-slate-800">{normalizeDateStr(selectedDate)}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                             <span className="text-sm font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">{selectedRole}</span>
-                             {selectedRole !== '執事輪值' && <span className="text-sm font-bold text-slate-400">• {selectedSession}</span>}
-                          </div>
+                         <p className="text-2xl font-black text-slate-800">{normalizeDateStr(selectedDate)}</p>
+                         <div className="flex items-center gap-2 mt-1">
+                            <span className="text-sm font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">{selectedRole}</span>
+                            {selectedRole !== '執事輪值' && <span className="text-sm font-bold text-slate-400">• {selectedSession}</span>}
+                         </div>
                       </div>
                    </div>
                 </div>
@@ -632,23 +644,20 @@
                                       <span className="flex items-center gap-1 text-[10px] font-bold bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full border border-orange-100"><HandHeart size={10} /> 替補</span>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mt-1">
+                                  <div className="flex items-center gap-1 text-xs font-bold text-slate-400 mt-1">
                                     <span className="bg-slate-100 px-1.5 py-0.5 rounded">{person.session}</span>
                                     <span>•</span>
-                                    <span>本季服事 {person.stats} 次</span>
+                                    <span>本季 {person.stats} 次</span>
                                     
-                                    {/* ★★★ 修改：使用 CSS Badge 取代 Unicode 符號以確保顯示 ★★★ */}
-                                    {person.tags?.isH && (
-                                      <span title="FA/FB" className="ml-1 inline-flex items-center justify-center bg-slate-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded leading-none">
-                                        H
-                                      </span>
-                                    )}
-                                    {person.tags?.isF && (
-                                      <span title="類別1/2" className="ml-1 inline-flex items-center justify-center bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded leading-none">
-                                        F
-                                      </span>
+                                    {/* CSS H 標記 (FA/FB) */}
+                                    {(person.groupId === 'FA' || person.groupId === 'FB') && (
+                                        <span className="ml-1 w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-black" title="群組: FA/FB">H</span>
                                     )}
 
+                                    {/* CSS F 標記 (1/2) */}
+                                    {(person.session2 === '1' || person.session2 === '2') && (
+                                        <span className="ml-1 w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-black" title="二堂服事">F</span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
