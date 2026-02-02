@@ -6,7 +6,7 @@
     <title>TBC 崇拜服事查詢系統</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.22.20/babel.min.js"></script>
 
     <script type="importmap">
     {
@@ -35,13 +35,14 @@
                     <div style="color:red; background:#fee; padding:20px; margin:20px; border-radius:10px;">
                         <h3>❌ 程式發生錯誤</h3>
                         <p>${msg}</p>
+                        <p>Line: ${line}</p>
                     </div>`;
             }
             return false;
         };
     </script>
 
-    <script type="text/babel" data-type="module">
+    <script type="text/babel" data-type="module" data-presets="react">
         import React, { useState, useEffect, useMemo } from 'react';
         import { createRoot } from 'react-dom/client';
         import { 
@@ -118,7 +119,7 @@
           return stats;
         };
 
-        // ★★★ 萬能讀取邏輯：確保抓到 Group 和 Session2 ★★★
+        // 資料讀取邏輯 (已移除 F 欄相關邏輯)
         const processPeopleData = (rawData) => {
           if (!Array.isArray(rawData) || rawData.length === 0) return [];
 
@@ -126,16 +127,14 @@
           const dataRows = isObjectArray ? rawData : rawData.slice(1); 
 
           return dataRows.map((row, index) => {
-            // 1. 轉成 Key-Value 物件以利搜尋
             let rowObj = row;
             if (!isObjectArray) {
                 rowObj = {};
                 rawData[0].forEach((h, i) => { rowObj[h] = row[i]; });
             }
-            // 2. 轉成 Value 陣列以利位置搜尋
             const rowValues = Object.values(rowObj);
 
-            // 基礎欄位
+            // 基礎資料
             const nameKey = Object.keys(rowObj).find(k => k.includes('姓名') || k.toLowerCase() === 'name');
             const name = nameKey ? rowObj[nameKey] : '';
             
@@ -148,45 +147,26 @@
             const willingnessKey = Object.keys(rowObj).find(k => k.includes('服事意願') || k.includes('willingness'));
             const willingness = willingnessKey ? String(rowObj[willingnessKey]) : '';
 
-            // ★★★ 策略 1：位置讀取 (B欄=Index 1, F欄=Index 5) ★★★
-            // 這是最穩的方法，假設 GAS 回傳的物件順序是正確的
-            let groupId = String(rowValues[1] || '').toUpperCase().trim();
-            let session2 = String(rowValues[5] || '').trim();
+            // --- 抓取 Group (B欄) ---
+            
+            // 1. 強制抓取 B欄位置 (Index 1)
+            let rawGroup = rowValues.length > 1 ? String(rowValues[1] || '') : '';
+            let groupId = rawGroup.toUpperCase().trim();
 
-            // ★★★ 策略 2：如果策略 1 沒抓到，嘗試關鍵字搜尋 ★★★
-            if (groupId !== 'FA' && groupId !== 'FB') {
-                const key = Object.keys(rowObj).find(k => k.includes('ID') || k.includes('群組'));
-                if (key) groupId = String(rowObj[key] || '').toUpperCase().trim();
-            }
-            if (session2 !== '1' && session2 !== '2') {
-                const key = Object.keys(rowObj).find(k => k.includes('二堂') || k.includes('2堂') || k.includes('主日'));
-                if (key) session2 = String(rowObj[key] || '').trim();
-            }
-
-            // ★★★ 策略 3：暴力掃描 (如果標題全錯，內容對也可以) ★★★
-            if (groupId !== 'FA' && groupId !== 'FB') {
-                // 掃描所有欄位，看有沒有 "FA" 或 "FB"
-                const found = rowValues.find(v => String(v).toUpperCase().trim() === 'FA' || String(v).toUpperCase().trim() === 'FB');
-                if (found) groupId = String(found).toUpperCase().trim();
-            }
-
-            // DEBUG 第一筆
-            if (index === 0) {
-                console.log(`[除錯] 第一人: ${name}`);
-                console.log(` - 最終判定 Group: ${groupId}`);
-                console.log(` - 最終判定 Session2: ${session2}`);
-                console.log(` - 原始資料:`, rowObj);
+            // 2. 如果位置抓不到，嘗試用標題關鍵字抓 (備案)
+            if (!groupId.includes('FA') && !groupId.includes('FB')) {
+                const gKey = Object.keys(rowObj).find(k => k.toUpperCase().includes('ID') || k.includes('群組'));
+                if (gKey) groupId = String(rowObj[gKey] || '').toUpperCase().trim();
             }
 
             // 處理崗位
             const roles = {};
             Object.keys(ROLE_CONFIG).forEach(roleName => {
-              // 必須精準對應欄位名稱
               const key = Object.keys(rowObj).find(k => k.trim() === roleName);
               if (key && rowObj[key]) roles[roleName] = "O";
             });
 
-            return { name, session, unavailable, willingness, roles, groupId, session2 };
+            return { name, session, unavailable, willingness, roles, groupId };
           }).filter(p => p.name);
         };
 
@@ -201,7 +181,6 @@
           const [statsData, setStatsData] = useState(DEFAULT_STATS);
           const [isSyncing, setIsSyncing] = useState(false);
           const [syncStatus, setSyncStatus] = useState('');
-          const [debugInfo, setDebugInfo] = useState({});
 
           useEffect(() => {
             const loadAllData = async () => {
@@ -215,13 +194,11 @@
                 ]);
                 
                 if (resSchedule.status === 'success') {
-                    // 兼容 GAS 可能回傳的兩種格式 (Object Array 或 2D Array)
-                    const isObj = !Array.isArray(resSchedule.data[0]);
-                    setScheduleData(isObj ? resSchedule.data : sheetToObjects(resSchedule.data));
+                  const isObj = !Array.isArray(resSchedule.data[0]);
+                  setScheduleData(isObj ? resSchedule.data : sheetToObjects(resSchedule.data));
                 }
                 
                 if (resData.status === 'success') {
-                    // 使用萬能讀取
                     setPeopleData(processPeopleData(resData.data));
                 }
 
@@ -246,7 +223,7 @@
             if (!trimmedName) return setLoginError('請輸入姓名');
             
             const userExists = peopleData.some(p => p.name === trimmedName);
-            if (userExists || peopleData.length === 0) { // 寬鬆登入
+            if (userExists || peopleData.length === 0) {
                 setCurrentView('mySchedule');
                 setLoginError('');
             } else {
@@ -254,11 +231,18 @@
             }
           };
 
+          const handleLogout = () => {
+            setName('');
+            setLoginError('');
+            setSwapRequest(null);
+            setCurrentView('login');
+          };
+
           const renderView = () => {
             switch (currentView) {
               case 'login': return <LoginView name={name} setName={setName} onLogin={handleLogin} loginError={loginError} isSyncing={isSyncing} syncStatus={syncStatus} />;
-              case 'mySchedule': return <MyScheduleView name={name} scheduleData={scheduleData} onLogout={() => setCurrentView('login')} onRequestSwap={(req) => { setSwapRequest(req); setCurrentView('swapSearch'); }} />;
-              case 'swapSearch': return <SwapSearchView name={name} scheduleData={scheduleData} peopleData={peopleData} statsData={statsData} onBack={() => setCurrentView('mySchedule')} onLogout={() => setCurrentView('login')} initialRequest={swapRequest} />;
+              case 'mySchedule': return <MyScheduleView name={name} scheduleData={scheduleData} peopleData={peopleData} onLogout={handleLogout} onRequestSwap={(req) => { setSwapRequest(req); setCurrentView('swapSearch'); }} />;
+              case 'swapSearch': return <SwapSearchView name={name} scheduleData={scheduleData} peopleData={peopleData} statsData={statsData} onBack={() => setCurrentView('mySchedule')} onLogout={handleLogout} initialRequest={swapRequest} />;
               default: return <LoginView name={name} setName={setName} onLogin={handleLogin} />;
             }
           };
@@ -292,9 +276,12 @@
           );
         }
 
-        function MyScheduleView({ name, scheduleData, onLogout, onRequestSwap }) {
+        function MyScheduleView({ name, scheduleData, peopleData, onLogout, onRequestSwap }) {
           const [flatShifts, setFlatShifts] = useState([]);
           const numberedRoles = ['接待', '收奉獻', '主餐', '新朋友關懷']; 
+          
+          // 找出自己的資料以顯示標記
+          const myData = peopleData.find(p => p.name === name) || {};
 
           useEffect(() => {
             const searchName = name.trim();
@@ -337,7 +324,15 @@
               <nav className="bg-white sticky top-0 z-50 border-b border-slate-100 px-6 py-4 flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <div className="bg-indigo-100 p-2 rounded-xl text-indigo-600"><User size={20} /></div>
-                  <div><p className="text-[10px] text-slate-400 font-bold uppercase">system user</p><h2 className="text-lg font-black text-slate-800">{name}</h2></div>
+                  <div className="flex flex-col">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">system user</p>
+                      <div className="flex items-center gap-1">
+                        <h2 className="text-lg font-black text-slate-800">{name}</h2>
+                        {/* 在首頁也顯示自己的標記，移除 F 標記 */}
+                        {(myData.groupId?.includes('FA') || myData.groupId?.includes('FB')) && 
+                             <span className="ml-1 w-5 h-5 rounded-[4px] bg-slate-600 text-white flex items-center justify-center text-[10px] font-bold">H</span>}
+                      </div>
+                  </div>
                 </div>
                 <button onClick={onLogout} className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-xl text-slate-500 font-bold hover:text-red-500 hover:bg-red-50 transition-colors"><LogOut size={18}/><span>登出</span></button>
               </nav>
@@ -385,7 +380,6 @@
 
           useEffect(() => {
             if (!initialRequest) return;
-            // 搜尋邏輯
             const targetDateNorm = normalizeDateStr(initialRequest.date);
             const schedulesOnDate = scheduleData.filter(s => normalizeDateStr(s['日期']) === targetDateNorm);
             const requesterBusyDates = new Set();
@@ -400,14 +394,12 @@
               if (!person.roles[initialRequest.role]) return;
               if (initialRequest.role !== '執事輪值' && person.session !== '皆可' && !person.session.includes(initialRequest.session)) return;
               
-              // 檢查當天是否忙碌
               let isBusy = false;
               schedulesOnDate.forEach(s => {
                  if(Object.values(s).some(v => String(v).includes(person.name))) isBusy = true;
               });
               if(isBusy) return;
 
-              // 計算可交換
               const swapOptions = [];
               scheduleData.forEach(row => {
                  const rDate = normalizeDateStr(row['日期']);
@@ -476,15 +468,11 @@
                                     <span>•</span>
                                     <span>本季 {person.stats} 次</span>
                                     
-                                    {/* ★★★ 🅷 標記 ★★★ */}
-                                    {(person.groupId === 'FA' || person.groupId === 'FB') && (
-                                        <span className="ml-1 w-5 h-5 rounded bg-slate-600 text-white flex items-center justify-center text-[10px] font-bold" title="群組: FA/FB">H</span>
+                                    {/* H 標記 (FA/FB) */}
+                                    {(person.groupId.includes('FA') || person.groupId.includes('FB')) && (
+                                        <span className="ml-1 w-5 h-5 rounded-[4px] bg-slate-600 text-white flex items-center justify-center text-[10px] font-bold" title="群組: FA/FB">H</span>
                                     )}
-
-                                    {/* ★★★ 🅵 標記 ★★★ */}
-                                    {(person.session2 === '1' || person.session2 === '2') && (
-                                        <span className="ml-1 w-5 h-5 rounded bg-slate-600 text-white flex items-center justify-center text-[10px] font-bold" title="二堂服事">F</span>
-                                    )}
+                                    {/* F 標記 已移除 */}
                                   </div>
                                 </div>
                               </div>
