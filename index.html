@@ -168,14 +168,13 @@
             if (s2Key) {
                 session2 = String(rowObj[s2Key]).trim();
             } else {
-                // 排除含 "時段" 的標題，避免誤抓到服事時段
                 if (!session2.includes('1') && !session2.includes('2')) {
                     const altKey = Object.keys(rowObj).find(k => (k.includes('二堂') || k.includes('2堂')) && !k.includes('時段'));
                     if (altKey) session2 = String(rowObj[altKey]).trim();
                 }
             }
 
-            // 3. 寬鬆判定並轉換為 S1 / S2 (修正為顯示 S1/S2)
+            // 3. 寬鬆判定並轉換為 S1 / S2
             let finalSession2 = '';
             const s2Upper = session2.toUpperCase();
             if (s2Upper.includes('S1') || s2Upper.includes('1')) finalSession2 = 'S1';
@@ -203,7 +202,6 @@
           const [statsData, setStatsData] = useState(DEFAULT_STATS);
           const [isSyncing, setIsSyncing] = useState(false);
           const [syncStatus, setSyncStatus] = useState('');
-          // 新增：進度條狀態
           const [progress, setProgress] = useState(0);
 
           useEffect(() => {
@@ -244,7 +242,6 @@
                 console.error("同步失敗", err);
                 setSyncStatus('連線發生錯誤');
               } finally {
-                // 延遲一下關閉讀取狀態，讓使用者看到 100%
                 setTimeout(() => setIsSyncing(false), 500);
               }
             };
@@ -261,7 +258,7 @@
                 setCurrentView('mySchedule');
                 setLoginError('');
             } else {
-                setLoginError('名字找不到！檢查看看有沒有打錯');
+                setLoginError('找不到此姓名');
             }
           };
 
@@ -292,7 +289,7 @@
                 <div className="text-center mb-10">
                   <div className="bg-indigo-600 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-indigo-200 rotate-3"><Calendar className="w-12 h-12 text-white" /></div>
                   <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">TBC 崇拜服事查詢系統</h2>
-                  <p className="text-slate-400 mt-2 font-medium">資料同步成功後，再輸入完整姓名</p>
+                  <p className="text-slate-400 mt-2 font-medium">資料同步完成後，再輸入完整姓名</p>
                 </div>
                 <form onSubmit={onLogin} className="space-y-4">
                   <div className="relative">
@@ -332,6 +329,8 @@
           const [flatShifts, setFlatShifts] = useState([]);
           const numberedRoles = ['接待', '收奉獻', '主餐', '新朋友關懷']; 
           
+          const myData = peopleData.find(p => p.name === name) || {};
+
           useEffect(() => {
             const searchName = name.trim();
             const tempShifts = [];
@@ -377,7 +376,6 @@
                       <p className="text-[10px] text-slate-400 font-bold uppercase">system user</p>
                       <div className="flex items-center gap-1">
                         <h2 className="text-lg font-black text-slate-800">{name}</h2>
-                        {/* 已移除 H/S 標記 */}
                       </div>
                   </div>
                 </div>
@@ -543,7 +541,7 @@
                                 </div>
                               </div>
                             </div>
-                            {person.swapOptions.length > 0 && (
+                            {person.swapOptions.length > 0 ? (
                               <div className="mt-4 pt-3 border-t border-slate-50">
                                 <p className="text-[10px] font-bold text-slate-400 mb-2 flex items-center gap-1"><RefreshCw size={10} /> 雙方可以換班日期 (互換班次)：</p>
                                 <div className="flex flex-wrap gap-2">
@@ -554,6 +552,12 @@
                                     </div>
                                   ))}
                                 </div>
+                              </div>
+                            ) : (
+                              <div className="mt-4 pt-3 border-t border-slate-50">
+                                <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                                    <Info size={10} /> 說明：雙方無班可換，但時間上可以支援
+                                </p>
                               </div>
                             )}
                           </div>
