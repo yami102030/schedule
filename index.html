@@ -120,7 +120,7 @@
           return stats;
         };
 
-        // ★★★ 核心修正：嚴格標題鎖定法 ★★★
+        // 資料讀取邏輯
         const processPeopleData = (rawData) => {
           if (!Array.isArray(rawData) || rawData.length === 0) return [];
 
@@ -133,6 +133,7 @@
                 rowObj = {};
                 rawData[0].forEach((h, i) => { rowObj[h] = row[i]; });
             }
+            const rowValues = Object.values(rowObj);
 
             // 基礎資料
             const nameKey = Object.keys(rowObj).find(k => k.includes('姓名') || k.toLowerCase() === 'name');
@@ -147,7 +148,7 @@
             const willingnessKey = Object.keys(rowObj).find(k => k.includes('服事意願') || k.includes('willingness'));
             const willingness = willingnessKey ? String(rowObj[willingnessKey]) : '';
 
-            // --- 抓取 Group 與 Session2 (嚴格限制) ---
+            // --- 抓取 Group 與 Session2 ---
             
             // 1. 群組 ID：標題必須包含 "群組ID" (刪除所有備案)
             const gKey = Object.keys(rowObj).find(k => k.includes('群組ID'));
@@ -162,13 +163,6 @@
             const s2Upper = session2.toUpperCase();
             if (s2Upper.includes('F1') || s2Upper.includes('1')) finalSession2 = 'F1';
             else if (s2Upper.includes('F2') || s2Upper.includes('2')) finalSession2 = 'F2';
-
-            // DEBUG 第一筆
-            if (index === 0) {
-                console.log(`[除錯] 第一人: ${name}`);
-                console.log(` - 嚴格標題抓取 [群組ID]: ${gKey || '未找到'} -> ${groupId}`);
-                console.log(` - 嚴格標題抓取 [主日服事二堂]: ${s2Key || '未找到'} -> ${session2} -> 最終: ${finalSession2}`);
-            }
 
             // 處理崗位
             const roles = {};
@@ -341,9 +335,9 @@
                         <h2 className="text-lg font-black text-slate-800">{name}</h2>
                         {/* 在首頁顯示自己的標記 */}
                         {(myData.groupId?.includes('FA') || myData.groupId?.includes('FB')) && 
-                             <span className="ml-1 w-5 h-5 rounded-[4px] bg-slate-600 text-white flex items-center justify-center text-[10px] font-bold">H</span>}
+                             <span className="ml-1 w-5 h-5 rounded-[4px] bg-slate-400 text-white flex items-center justify-center text-[10px] font-bold">H</span>}
                         {(myData.session2 === 'F1' || myData.session2 === 'F2') && 
-                             <span className="ml-1 w-5 h-5 rounded-[4px] bg-slate-600 text-white flex items-center justify-center text-[10px] font-bold">F</span>}
+                             <span className="ml-1 w-5 h-5 rounded-[4px] bg-slate-400 text-white flex items-center justify-center text-[10px] font-bold">F</span>}
                       </div>
                   </div>
                 </div>
@@ -479,16 +473,16 @@
                                   <div className="flex items-center gap-1 text-xs font-bold text-slate-400 mt-1">
                                     <span className="bg-slate-100 px-1.5 py-0.5 rounded">{person.session}</span>
                                     <span>•</span>
-                                    <span>本季服事 {person.stats} 次</span>
+                                    <span>本季 {person.stats} 次</span>
                                     
-                                    {/* H 標記 (FA/FB) */}
+                                    {/* H 標記 (FA/FB) - 修改顏色為 bg-slate-400 */}
                                     {(person.groupId.includes('FA') || person.groupId.includes('FB')) && (
-                                        <span className="ml-1 w-5 h-5 rounded-[4px] bg-slate-600 text-white flex items-center justify-center text-[10px] font-bold" title="群組: FA/FB">H</span>
+                                        <span className="ml-1 w-5 h-5 rounded-[4px] bg-slate-400 text-white flex items-center justify-center text-[10px] font-bold" title="群組: FA/FB">H</span>
                                     )}
 
-                                    {/* F 標記 (F1/F2 -> F) */}
+                                    {/* F 標記 (F1/F2 -> F) - 修改顏色為 bg-slate-400 */}
                                     {(person.session2 === 'F1' || person.session2 === 'F2') && (
-                                        <span className="ml-1 w-5 h-5 rounded-[4px] bg-slate-600 text-white flex items-center justify-center text-[10px] font-bold" title={`二堂服事: ${person.session2}`}>F</span>
+                                        <span className="ml-1 w-5 h-5 rounded-[4px] bg-slate-400 text-white flex items-center justify-center text-[10px] font-bold" title={`二堂服事: ${person.session2}`}>F</span>
                                     )}
                                   </div>
                                 </div>
